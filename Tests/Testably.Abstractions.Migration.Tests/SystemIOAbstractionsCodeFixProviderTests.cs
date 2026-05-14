@@ -676,4 +676,26 @@ public class SystemIOAbstractionsCodeFixProviderTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 			source);
 	}
+
+	[Fact]
+	public async Task ParameterlessConstructor_TargetTypedNewWithQualifiedTarget_HasNoFix()
+	{
+		// `new()` is target-typed; the qualified LHS keeps the construction bound to
+		// TestableIO regardless of the using swap. Suppress the fix to avoid leaving
+		// the source half-rewritten.
+		const string source = """
+			public class C
+			{
+				public void Run()
+				{
+					System.IO.Abstractions.TestingHelpers.MockFileSystem fs = {|#0:new()|};
+				}
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			source);
+	}
 }

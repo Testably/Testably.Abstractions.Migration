@@ -108,10 +108,35 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	private static bool HasUnqualifiedMockFileSystemTypeName(BaseObjectCreationExpressionSyntax creation)
 		=> creation switch
 		{
-			ImplicitObjectCreationExpressionSyntax => true,
 			ObjectCreationExpressionSyntax { Type: IdentifierNameSyntax, } => true,
+			ImplicitObjectCreationExpressionSyntax implicitCreation
+				=> HasUnqualifiedImplicitTargetType(implicitCreation),
 			_ => false,
 		};
+
+	private static bool HasUnqualifiedImplicitTargetType(ImplicitObjectCreationExpressionSyntax implicitCreation)
+	{
+		// `new()` is target-typed: the contextual type is what the compiler binds to.
+		// The using-swap fix only retargets unqualified `MockFileSystem` identifiers,
+		// so an enclosing fully-qualified or alias-qualified target type
+		// (e.g. `System.IO.Abstractions.TestingHelpers.MockFileSystem fs = new();`)
+		// would keep the construction bound to TestableIO regardless of the swap.
+		//
+		// Only support contexts where the syntactic target type annotation is itself
+		// an unqualified IdentifierNameSyntax. Other target-typing contexts (parameters,
+		// returns, assignments to non-local LHS, casts) fall through to manual review.
+		return implicitCreation.Parent switch
+		{
+			EqualsValueClauseSyntax
+			{
+				Parent: VariableDeclaratorSyntax
+				{
+					Parent: VariableDeclarationSyntax { Type: IdentifierNameSyntax, },
+				},
+			} => true,
+			_ => false,
+		};
+	}
 
 	private static async Task<Document> RewriteUsingsAsync(Document document, CancellationToken cancellationToken)
 	{
