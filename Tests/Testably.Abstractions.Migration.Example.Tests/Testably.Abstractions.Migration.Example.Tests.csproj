@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<RootNamespace>Testably.Abstractions.Migration.Example.Tests</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Testably.Abstractions.Migration\Testably.Abstractions.Migration.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Testably.Abstractions.Migration.Analyzers\Testably.Abstractions.Migration.Analyzers.csproj"
+						  PrivateAssets="all"
+						  ReferenceOutputAssembly="false"
+						  OutputItemType="Analyzer"
+						  SetTargetFramework="TargetFramework=netstandard2.0"/>
+		<ProjectReference Include="..\..\Source\Testably.Abstractions.Migration.Analyzers.CodeFixers\Testably.Abstractions.Migration.Analyzers.CodeFixers.csproj"
+						  PrivateAssets="all"
+						  ReferenceOutputAssembly="false"
+						  OutputItemType="Analyzer"
+						  SetTargetFramework="TargetFramework=netstandard2.0"/>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="System.IO.Abstractions.TestingHelpers" />
+	</ItemGroup>
+</Project>

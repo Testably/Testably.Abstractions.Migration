@@ -1,0 +1,66 @@
+<Project>
+
+	<Import Project="$(MSBuildThisFileDirectory)/../Directory.Build.props"
+			Condition="Exists('$(MSBuildThisFileDirectory)/../Directory.Build.props')"/>
+
+	<PropertyGroup>
+		<Authors>Testably</Authors>
+		<Description>Migration helpers from other file system abstraction libraries.</Description>
+		<Copyright>Copyright (c) 2026 - $([System.DateTime]::Now.ToString('yyyy')) Valentin Breuß</Copyright>
+		<RepositoryUrl>https://github.com/Testably/Testably.Abstractions.Migration.git</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageProjectUrl>https://docs.testably.org/Testably.Abstractions/Migration</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageIcon>Docs/logo.png</PackageIcon>
+		<PackageReadmeFile>Docs/README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<NoWarn>$(NoWarn);1701;1702</NoWarn>
+		<WarningsNotAsErrors>CS1591;NU5104</WarningsNotAsErrors>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+		<Nullable>annotations</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Nullable">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="$([MSBuild]::GetPathOfFileAbove('logo.png', '$(MSBuildThisFileDirectory)../Docs/'))"
+			  Pack="true"
+			  PackagePath="/Docs/"
+			  Link="\Docs\logo.png"
+			  Condition="Exists('$([MSBuild]::GetPathOfFileAbove(`logo.png`, `$(MSBuildThisFileDirectory)../Docs/`))')"/>
+		<None Include="$(SolutionDir)/Artifacts/README.md"
+			  Condition="Exists('$(SolutionDir)/Artifacts/README.md')"
+			  Pack="true"
+			  PackagePath="/Docs/"
+			  Link="Docs\README.md"/>
+		<None Include="$(SolutionDir)/README.md"
+			  Condition="!Exists('$(SolutionDir)/Artifacts/README.md')"
+			  Pack="true"
+			  PackagePath="/Docs/"
+			  Link="Docs\README.md"/>
+	</ItemGroup>
+
+</Project>

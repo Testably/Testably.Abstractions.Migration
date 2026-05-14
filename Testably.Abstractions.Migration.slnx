@@ -1,0 +1,39 @@
+<Solution>
+  <Folder Name="/Pipeline/">
+    <Project Path="Pipeline/Build.csproj" />
+  </Folder>
+  <Folder Name="/Playground/">
+    <Project Path="Tests/Testably.Abstractions.Migration.SystemIOAbstractionsPlayground/Testably.Abstractions.Migration.SystemIOAbstractionsPlayground.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/Testably.Abstractions.Migration.Example.Tests/Testably.Abstractions.Migration.Example.Tests.csproj" />
+    <Project Path="Tests/Testably.Abstractions.Migration.Tests/Testably.Abstractions.Migration.Tests.csproj" />
+  </Folder>
+  <Folder Name="/_/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="LICENSE" />
+    <File Path="nuget.config" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/_/.github/" />
+  <Folder Name="/_/.github/workflows/">
+    <File Path=".github/workflows/build.yml" />
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
+  <Folder Name="/_/Source/">
+    <File Path="Source/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/_/Tests/">
+    <File Path="Tests/Directory.Build.props" />
+  </Folder>
+  <Project Path="Source/Testably.Abstractions.Migration.Analyzers.CodeFixers/Testably.Abstractions.Migration.Analyzers.CodeFixers.csproj" />
+  <Project Path="Source/Testably.Abstractions.Migration.Analyzers/Testably.Abstractions.Migration.Analyzers.csproj" />
+  <Project Path="Source/Testably.Abstractions.Migration/Testably.Abstractions.Migration.csproj" />
+</Solution>
