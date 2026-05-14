@@ -57,7 +57,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			switch (pattern)
 			{
 				case Patterns.MockFileSystemDefaultConstructor:
-					RegisterDefaultCtorFix(context, diagnostic);
+					TryRegisterDefaultCtorFix(context, diagnostic, node);
 					break;
 				case Patterns.MockFileSystemOptionsConstructor:
 					TryRegisterOptionsCtorFix(context, diagnostic, node);
@@ -67,7 +67,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				case Patterns.AccessorMoveDirectory:
 				case Patterns.AccessorFileExists:
 				case Patterns.AccessorAddEmptyFile:
-					TryRegisterAccessorMethodFix(context, diagnostic, node, pattern);
+					await TryRegisterAccessorMethodFixAsync(context, diagnostic, node, pattern)
+						.ConfigureAwait(false);
 					break;
 				case Patterns.AccessorAddFile:
 					await TryRegisterAddFileFixAsync(context, diagnostic, node).ConfigureAwait(false);
@@ -83,8 +84,19 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	// ── Pattern: MockFileSystem.ctor() ───────────────────────────────────────
 
-	private static void RegisterDefaultCtorFix(CodeFixContext context, Diagnostic diagnostic)
+	private static void TryRegisterDefaultCtorFix(CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
 	{
+		// The fix only adjusts using directives. If the construction is alias- or
+		// fully-qualified (`new TestableIo.MockFileSystem()`), the type identifier
+		// stays bound to TestableIO regardless of the using swap, so the rewrite
+		// would produce code that still targets the old library.
+		BaseObjectCreationExpressionSyntax? creation =
+			node.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
+		if (creation is null || !HasUnqualifiedMockFileSystemTypeName(creation))
+		{
+			return;
+		}
+
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyAbstractionsMigration001CodeFixTitle,
@@ -92,6 +104,14 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				equivalenceKey: Patterns.MockFileSystemDefaultConstructor),
 			diagnostic);
 	}
+
+	private static bool HasUnqualifiedMockFileSystemTypeName(BaseObjectCreationExpressionSyntax creation)
+		=> creation switch
+		{
+			ImplicitObjectCreationExpressionSyntax => true,
+			ObjectCreationExpressionSyntax { Type: IdentifierNameSyntax, } => true,
+			_ => false,
+		};
 
 	private static async Task<Document> RewriteUsingsAsync(Document document, CancellationToken cancellationToken)
 	{
@@ -110,7 +130,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	private static void TryRegisterOptionsCtorFix(CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
 	{
 		ObjectCreationExpressionSyntax? creation = node.FirstAncestorOrSelf<ObjectCreationExpressionSyntax>();
-		if (creation?.ArgumentList is not { Arguments.Count: 1, } argList)
+		if (creation?.ArgumentList is not { Arguments.Count: 1, } argList
+		    || !HasUnqualifiedMockFileSystemTypeName(creation))
 		{
 			return;
 		}
@@ -204,27 +225,69 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return SyntaxFactory.ArgumentList();
 		}
 
-		SimpleLambdaExpressionSyntax lambda = SyntaxFactory.SimpleLambdaExpression(
-			SyntaxFactory.Parameter(SyntaxFactory.Identifier("o")),
+		return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+			SyntaxFactory.Argument(BuildUseCurrentDirectoryLambda(currentDirectoryRhs))));
+	}
+
+	private static SimpleLambdaExpressionSyntax BuildUseCurrentDirectoryLambda(ExpressionSyntax currentDirectory)
+	{
+		// Avoid shadowing identifiers used inside the captured `currentDirectory`
+		// expression. `new MockFileSystemOptions { CurrentDirectory = o }` must not
+		// rewrite to `o => o.UseCurrentDirectory(o)`.
+		string parameterName = PickFreshLambdaParameterName(currentDirectory);
+		return SyntaxFactory.SimpleLambdaExpression(
+			SyntaxFactory.Parameter(SyntaxFactory.Identifier(parameterName)),
 			SyntaxFactory.InvocationExpression(
 				SyntaxFactory.MemberAccessExpression(
 					SyntaxKind.SimpleMemberAccessExpression,
-					SyntaxFactory.IdentifierName("o"),
+					SyntaxFactory.IdentifierName(parameterName),
 					SyntaxFactory.IdentifierName("UseCurrentDirectory")),
 				SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
-					SyntaxFactory.Argument(currentDirectoryRhs.WithoutTrivia())))));
+					SyntaxFactory.Argument(currentDirectory.WithoutTrivia())))));
+	}
 
-		return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
-			SyntaxFactory.Argument(lambda)));
+	private static string PickFreshLambdaParameterName(ExpressionSyntax embedded)
+	{
+		HashSet<string> used = new(embedded.DescendantNodesAndSelf()
+			.OfType<IdentifierNameSyntax>()
+			.Select(id => id.Identifier.Text));
+
+		string[] candidates = ["o", "options", "opt", "builder",];
+		foreach (string candidate in candidates)
+		{
+			if (!used.Contains(candidate))
+			{
+				return candidate;
+			}
+		}
+
+		for (int i = 1;; i++)
+		{
+			string n = $"o{i}";
+			if (!used.Contains(n))
+			{
+				return n;
+			}
+		}
 	}
 
 	// ── Pattern: 1:1 IMockFileDataAccessor method rewrites ───────────────────
 
-	private static void TryRegisterAccessorMethodFix(
+	private static async Task TryRegisterAccessorMethodFixAsync(
 		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node, string pattern)
 	{
 		InvocationExpressionSyntax? invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-		if (invocation?.Expression is not MemberAccessExpressionSyntax)
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess)
+		{
+			return;
+		}
+
+		// The rewrite emits `<receiver>.File.X(...)` / `<receiver>.Directory.X(...)`. Those
+		// members live on the concrete `MockFileSystem` class, not on `IMockFileDataAccessor` —
+		// so the fix must not run when the user calls through the interface.
+		SemanticModel? semanticModel = await context.Document
+			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+		if (semanticModel is null || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel))
 		{
 			return;
 		}
@@ -235,6 +298,15 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				ct => ApplyAccessorMethodRewriteAsync(context.Document, diagnostic, pattern, ct),
 				equivalenceKey: pattern),
 			diagnostic);
+	}
+
+	private static bool IsConcreteMockFileSystemReceiver(ExpressionSyntax receiver, SemanticModel semanticModel)
+	{
+		ITypeSymbol? type = semanticModel.GetTypeInfo(receiver).Type;
+		return type is INamedTypeSymbol named
+		       && named.Name == "MockFileSystem"
+		       && named.ContainingNamespace?.ToDisplayString()
+		       == "System.IO.Abstractions.TestingHelpers";
 	}
 
 	private static async Task<Document> ApplyAccessorMethodRewriteAsync(
@@ -292,12 +364,14 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			SyntaxFactory.IdentifierName(newMethod));
 
 		SeparatedSyntaxList<ArgumentSyntax> args = original.ArgumentList.Arguments;
-		if (argCountToKeep < args.Count)
-		{
-			args = SyntaxFactory.SeparatedList(args.Take(argCountToKeep));
-		}
+		int keep = argCountToKeep < args.Count ? argCountToKeep : args.Count;
+		// Strip the NameColon: TestableIO and Testably use different parameter names
+		// (e.g. `MoveDirectory(sourcePath:, destPath:)` vs `Directory.Move(sourceDirName:,
+		// destDirName:)`). Positional binding is the only safe form across the swap.
+		SeparatedSyntaxList<ArgumentSyntax> normalized = SyntaxFactory.SeparatedList(
+			args.Take(keep).Select(arg => arg.WithNameColon(null)));
 
-		return SyntaxFactory.InvocationExpression(newAccess, original.ArgumentList.WithArguments(args));
+		return SyntaxFactory.InvocationExpression(newAccess, original.ArgumentList.WithArguments(normalized));
 	}
 
 	private static InvocationExpressionSyntax BuildAddEmptyFileInvocation(
@@ -319,7 +393,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
 	{
 		InvocationExpressionSyntax? invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-		if (invocation?.Expression is not MemberAccessExpressionSyntax
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
 		    || invocation.ArgumentList.Arguments.Count < 2)
 		{
 			return;
@@ -327,7 +401,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		SemanticModel? semanticModel = await context.Document
 			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
-		if (semanticModel is null)
+		if (semanticModel is null
+		    || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel))
 		{
 			return;
 		}
@@ -400,9 +475,12 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				SyntaxFactory.IdentifierName("File")),
 			SyntaxFactory.IdentifierName(newMethod));
 
+		// Strip NameColon on the path arg — AddFile uses `path:` but File.WriteAllText
+		// uses the same name today, however the WriteAllBytes overload may differ in
+		// future updates. Positional binding is the safe baseline.
 		SeparatedSyntaxList<ArgumentSyntax> args = SyntaxFactory.SeparatedList(new[]
 		{
-			pathArg.WithoutTrivia(),
+			pathArg.WithNameColon(null).WithoutTrivia(),
 			SyntaxFactory.Argument(shape.PrimaryContent.WithoutTrivia()),
 		});
 		if (shape.SecondaryContent is not null)
@@ -499,7 +577,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node, string pattern)
 	{
 		if (!TryGetCreationInLocalDecl(node, out BaseObjectCreationExpressionSyntax? creation,
-			    out ArgumentListSyntax? argList, out _, out BlockSyntax? _))
+			    out ArgumentListSyntax? argList, out _, out BlockSyntax? _)
+		    || !HasUnqualifiedMockFileSystemTypeName(creation!))
 		{
 			return;
 		}
@@ -651,17 +730,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return SyntaxFactory.ArgumentList();
 		}
 
-		SimpleLambdaExpressionSyntax lambda = SyntaxFactory.SimpleLambdaExpression(
-			SyntaxFactory.Parameter(SyntaxFactory.Identifier("o")),
-			SyntaxFactory.InvocationExpression(
-				SyntaxFactory.MemberAccessExpression(
-					SyntaxKind.SimpleMemberAccessExpression,
-					SyntaxFactory.IdentifierName("o"),
-					SyntaxFactory.IdentifierName("UseCurrentDirectory")),
-				SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
-					SyntaxFactory.Argument(expression.WithoutTrivia())))));
-
-		return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(lambda)));
+		return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+			SyntaxFactory.Argument(BuildUseCurrentDirectoryLambda(expression))));
 	}
 
 	private static List<DictionaryEntryShape>? TryParseDictionaryEntries(

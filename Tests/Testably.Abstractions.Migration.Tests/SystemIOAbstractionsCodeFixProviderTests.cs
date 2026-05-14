@@ -565,4 +565,115 @@ public class SystemIOAbstractionsCodeFixProviderTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 			fixedSource);
 	}
+
+	[Fact]
+	public async Task OptionsConstructor_CurrentDirectoryReferencesIdentifierNamed_o_ShouldPickFreshLambdaParameter()
+	{
+		// The default lambda parameter name `o` would shadow the local `o`, rewriting
+		// `CurrentDirectory = o` to `o => o.UseCurrentDirectory(o)` — wrong semantics.
+		const string source = """
+			using System.IO.Abstractions;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public IFileSystem Build()
+				{
+					string o = "/work";
+					return {|#0:new MockFileSystem(new MockFileSystemOptions { CurrentDirectory = o })|};
+				}
+			}
+			""";
+
+		const string fixedSource = """
+			using System.IO.Abstractions;
+			using Testably.Abstractions.Testing;
+
+			public class C
+			{
+				public IFileSystem Build()
+				{
+					string o = "/work";
+					return new MockFileSystem(options => options.UseCurrentDirectory(o));
+				}
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			fixedSource);
+	}
+
+	[Fact]
+	public async Task AccessorMoveDirectory_WithNamedArgs_ShouldStripNameColons()
+	{
+		// TestableIO uses sourcePath/destPath; Directory.Move uses sourceDirName/destDirName.
+		// Keeping the labels would produce code that won't compile.
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+					=> {|#0:fs.MoveDirectory(sourcePath: "/a", destPath: "/b")|};
+			}
+			""";
+
+		const string fixedSource = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+					=> fs.Directory.Move("/a", "/b");
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			fixedSource);
+	}
+
+	[Fact]
+	public async Task ParameterlessConstructor_AliasQualifiedType_HasNoFix()
+	{
+		// `using TestableIo = …;` keeps the type alias-qualified. The using-only fix
+		// would not retarget the binding, so we suppress it.
+		const string source = """
+			using System.IO.Abstractions;
+			using TestableIo = System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public IFileSystem Build() => {|#0:new TestableIo.MockFileSystem()|};
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			source);
+	}
+
+	[Fact]
+	public async Task AccessorAddDirectory_InterfaceTypedReceiver_HasNoFix()
+	{
+		// The rewrite would emit `accessor.Directory.CreateDirectory(...)`, but
+		// IMockFileDataAccessor doesn't expose a Directory property — non-compiling.
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(IMockFileDataAccessor accessor) => {|#0:accessor.AddDirectory("/foo")|};
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			source);
+	}
 }
