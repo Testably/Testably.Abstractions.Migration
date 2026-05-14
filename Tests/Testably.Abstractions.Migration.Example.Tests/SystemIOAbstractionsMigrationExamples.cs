@@ -1,3 +1,8 @@
+// This file intentionally instantiates both libraries side-by-side for cross-library
+// parity checks. The TestableIO usages are permanent — they cannot be migrated away
+// without losing the comparison — so the migration analyzer is suppressed for the file.
+#pragma warning disable TestablyAbstractionsMigration001
+
 using System.IO;
 using TestableIo = System.IO.Abstractions.TestingHelpers;
 using TestablyAbstractions = Testably.Abstractions.Testing;

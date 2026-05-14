@@ -1,3 +1,9 @@
+// Playground samples deliberately exercise the un-migrated API surface so the analyzer
+// and fixer can be developed against them. The fixer-parity check runs over this file's
+// content via the code-fix pipeline, not the normal build, so the in-source diagnostic
+// is suppressed here to keep static-analysis dashboards quiet.
+#pragma warning disable TestablyAbstractionsMigration001
+
 using System.IO.Abstractions.TestingHelpers;
 
 namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;

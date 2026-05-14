@@ -52,14 +52,12 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		if (SymbolEqualityComparer.Default.Equals(type, symbols.MockFileSystem))
+		// Phase 1 only handles the parameterless overload. The other three
+		// MockFileSystem constructors are addressed in Phase 2.
+		if (SymbolEqualityComparer.Default.Equals(type, symbols.MockFileSystem)
+		    && creation.Arguments.Length == 0)
 		{
-			// Phase 1 only handles the parameterless overload. The other three
-			// MockFileSystem constructors are addressed in Phase 2.
-			if (creation.Arguments.Length == 0)
-			{
-				Report(context, creation, Patterns.MockFileSystemDefaultConstructor);
-			}
+			Report(context, creation, Patterns.MockFileSystemDefaultConstructor);
 		}
 	}
 

@@ -14,9 +14,9 @@ internal sealed class TestableIoSymbols
 
 	private TestableIoSymbols(
 		INamedTypeSymbol mockFileSystem,
-		INamedTypeSymbol mockFileData,
-		INamedTypeSymbol mockDriveData,
-		INamedTypeSymbol mockFileDataAccessor)
+		INamedTypeSymbol? mockFileData,
+		INamedTypeSymbol? mockDriveData,
+		INamedTypeSymbol? mockFileDataAccessor)
 	{
 		MockFileSystem = mockFileSystem;
 		MockFileData = mockFileData;
@@ -25,9 +25,13 @@ internal sealed class TestableIoSymbols
 	}
 
 	public INamedTypeSymbol MockFileSystem { get; }
-	public INamedTypeSymbol MockFileData { get; }
-	public INamedTypeSymbol MockDriveData { get; }
-	public INamedTypeSymbol MockFileDataAccessor { get; }
+
+	// Auxiliary types are nullable: a future TestingHelpers rename or removal should
+	// only disable the patterns that actually consume the missing type, not the whole
+	// analyzer. Call sites that need one of these symbols must null-check first.
+	public INamedTypeSymbol? MockFileData { get; }
+	public INamedTypeSymbol? MockDriveData { get; }
+	public INamedTypeSymbol? MockFileDataAccessor { get; }
 
 	public static TestableIoSymbols? TryGetFrom(Compilation compilation)
 	{
@@ -38,18 +42,10 @@ internal sealed class TestableIoSymbols
 			return null;
 		}
 
-		INamedTypeSymbol? mockFileData =
-			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockFileData");
-		INamedTypeSymbol? mockDriveData =
-			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockDriveData");
-		INamedTypeSymbol? mockFileDataAccessor =
-			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".IMockFileDataAccessor");
-
-		if (mockFileData is null || mockDriveData is null || mockFileDataAccessor is null)
-		{
-			return null;
-		}
-
-		return new TestableIoSymbols(mockFileSystem, mockFileData, mockDriveData, mockFileDataAccessor);
+		return new TestableIoSymbols(
+			mockFileSystem,
+			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockFileData"),
+			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockDriveData"),
+			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".IMockFileDataAccessor"));
 	}
 }
