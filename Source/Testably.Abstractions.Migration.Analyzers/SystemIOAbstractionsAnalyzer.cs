@@ -36,6 +36,10 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			start.RegisterOperationAction(
 				ctx => AnalyzeObjectCreation(ctx, symbols),
 				OperationKind.ObjectCreation);
+
+			start.RegisterOperationAction(
+				ctx => AnalyzeInvocation(ctx, symbols),
+				OperationKind.Invocation);
 		});
 	}
 
@@ -46,29 +50,95 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		INamedTypeSymbol? type = creation.Constructor?.ContainingType;
-		if (type is null)
+		IMethodSymbol? constructor = creation.Constructor;
+		if (constructor is null
+		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, symbols.MockFileSystem))
 		{
 			return;
 		}
 
-		// Phase 1 only handles the parameterless overload. The other three
-		// MockFileSystem constructors are addressed in Phase 2.
-		if (SymbolEqualityComparer.Default.Equals(type, symbols.MockFileSystem)
-		    && creation.Arguments.Length == 0)
+		string? pattern = ClassifyMockFileSystemConstructor(constructor);
+		if (pattern is not null)
 		{
-			Report(context, creation, Patterns.MockFileSystemDefaultConstructor);
+			Report(context, creation.Syntax.GetLocation(), pattern);
 		}
 	}
 
-	private static void Report(OperationAnalysisContext context, IObjectCreationOperation creation, string pattern)
+	private static void AnalyzeInvocation(OperationAnalysisContext context, TestableIoSymbols symbols)
+	{
+		if (context.Operation is not IInvocationOperation invocation)
+		{
+			return;
+		}
+
+		IMethodSymbol method = invocation.TargetMethod;
+		INamedTypeSymbol? containingType = method.ContainingType;
+		if (containingType is null)
+		{
+			return;
+		}
+
+		bool onMockFileSystem =
+			SymbolEqualityComparer.Default.Equals(containingType, symbols.MockFileSystem);
+		bool onAccessor =
+			symbols.MockFileDataAccessor is { } accessor
+			&& SymbolEqualityComparer.Default.Equals(containingType, accessor);
+		if (!onMockFileSystem && !onAccessor)
+		{
+			return;
+		}
+
+		string? pattern = ClassifyAccessorMethod(method);
+		if (pattern is not null)
+		{
+			Report(context, invocation.Syntax.GetLocation(), pattern);
+		}
+	}
+
+	private static string? ClassifyMockFileSystemConstructor(IMethodSymbol constructor)
+	{
+		ImmutableArray<IParameterSymbol> parameters = constructor.Parameters;
+		return parameters.Length switch
+		{
+			0 => Patterns.MockFileSystemDefaultConstructor,
+			1 when IsMockFileSystemOptions(parameters[0]) => Patterns.MockFileSystemOptionsConstructor,
+			2 when IsFilesDictionary(parameters[0]) && parameters[1].Type.SpecialType == SpecialType.System_String
+				=> Patterns.MockFileSystemFilesConstructor,
+			2 when IsFilesDictionary(parameters[0]) && IsMockFileSystemOptions(parameters[1])
+				=> Patterns.MockFileSystemFilesOptionsConstructor,
+			_ => null,
+		};
+	}
+
+	private static bool IsFilesDictionary(IParameterSymbol parameter)
+		=> parameter.Type is INamedTypeSymbol named
+		   && named.Name == "IDictionary"
+		   && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic";
+
+	private static bool IsMockFileSystemOptions(IParameterSymbol parameter)
+		=> parameter.Type is INamedTypeSymbol named
+		   && named.Name == "MockFileSystemOptions"
+		   && named.ContainingNamespace?.ToDisplayString() == TestableIoSymbols.TestingHelpersNamespace;
+
+	private static string? ClassifyAccessorMethod(IMethodSymbol method) => method.Name switch
+	{
+		"AddFile" => Patterns.AccessorAddFile,
+		"AddEmptyFile" => Patterns.AccessorAddEmptyFile,
+		"AddDirectory" => Patterns.AccessorAddDirectory,
+		"RemoveFile" => Patterns.AccessorRemoveFile,
+		"MoveDirectory" => Patterns.AccessorMoveDirectory,
+		"FileExists" => Patterns.AccessorFileExists,
+		_ => null,
+	};
+
+	private static void Report(OperationAnalysisContext context, Location location, string pattern)
 	{
 		ImmutableDictionary<string, string?> properties =
 			new Dictionary<string, string?> { [Patterns.Key] = pattern, }.ToImmutableDictionary();
 
 		context.ReportDiagnostic(Diagnostic.Create(
 			Rules.SystemIOAbstractionsRule,
-			creation.Syntax.GetLocation(),
+			location,
 			properties,
 			messageArgs: null));
 	}
