@@ -1,6 +1,5 @@
 global using System;
 global using System.IO.Abstractions;
-global using System.IO.Abstractions.TestingHelpers;
 global using System.Threading.Tasks;
 global using Xunit;
 global using aweXpect;

@@ -1,3 +1,5 @@
+using System.IO.Abstractions.TestingHelpers;
+
 namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 
 /// <summary>
@@ -7,6 +9,11 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// </summary>
 public class MockFileSystemSamples
 {
-	// TODO: Add sample call sites for `new MockFileSystem(...)`, `AddFile(...)`,
-	//       `AddDirectory(...)`, `GetFile(...)`, `MockFileData` initializers, etc.
+	// Phase 1: parameterless `new MockFileSystem()`. The analyzer flags this; the code fix
+	// rewrites the file's usings to bind `MockFileSystem` to the Testably namespace.
+	public static IFileSystem Parameterless()
+	{
+		MockFileSystem fileSystem = new();
+		return fileSystem;
+	}
 }
