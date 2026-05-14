@@ -78,6 +78,12 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 					await TryRegisterFilesCtorFixAsync(context, diagnostic, node, pattern)
 						.ConfigureAwait(false);
 					break;
+				case Patterns.MockFileDataPropertyRead:
+					TryRegisterPropertyReadFix(context, diagnostic, node);
+					break;
+				case Patterns.MockFileDataPropertyWrite:
+					TryRegisterPropertyWriteFix(context, diagnostic, node);
+					break;
 			}
 		}
 	}
@@ -432,8 +438,21 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return;
 		}
 
-		if (ClassifyMockFileDataExpression(invocation.ArgumentList.Arguments[1].Expression, semanticModel,
-			    context.CancellationToken) is null)
+		MockFileDataShape? shape = ClassifyMockFileDataExpression(
+			invocation.ArgumentList.Arguments[1].Expression,
+			semanticModel,
+			context.CancellationToken);
+		if (shape is null)
+		{
+			return;
+		}
+
+		// When initializer properties are present, the rewrite has to insert follow-up
+		// statements alongside the original — only supported when the AddFile call is
+		// already at the top of a statement block.
+		if (shape.Value.InitializerProperties.Count > 0
+		    && (invocation.Parent is not ExpressionStatementSyntax
+		        || invocation.Parent.Parent is not BlockSyntax))
 		{
 			return;
 		}
@@ -478,7 +497,46 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		}
 
 		InvocationExpressionSyntax rewritten = BuildAddFileReplacement(memberAccess, pathArg, shape.Value);
-		compilationUnit = compilationUnit.ReplaceNode(invocation, rewritten.WithTriviaFrom(invocation));
+
+		// Without initializer properties, the rewrite is a 1:1 invocation swap.
+		if (shape.Value.InitializerProperties.Count == 0)
+		{
+			compilationUnit = compilationUnit.ReplaceNode(invocation, rewritten.WithTriviaFrom(invocation));
+			return document.WithSyntaxRoot(compilationUnit);
+		}
+
+		// With initializer properties, the expansion requires inserting follow-up
+		// statements after the original statement. Bail unless the AddFile call is a
+		// top-level expression statement inside a block — anything else would have
+		// nowhere to place the follow-ups.
+		if (invocation.Parent is not ExpressionStatementSyntax originalStatement
+		    || originalStatement.Parent is not BlockSyntax block)
+		{
+			return document;
+		}
+
+		(string indentation, string newline) = DetectIndentationAndNewline(originalStatement);
+		string receiverText = memberAccess.Expression.ToString().Trim();
+		string pathText = pathArg.Expression.ToString().Trim();
+
+		// NormalizeWhitespace resets the synthesized invocation's separators to standard
+		// formatting (`, ` between args). Without it the SeparatedList we built emits
+		// commas without spaces, which the test framework's formatter would otherwise
+		// repair but ParseStatement preserves verbatim.
+		StatementSyntax newPrimary = SyntaxFactory.ParseStatement(
+			$"{indentation}{rewritten.NormalizeWhitespace()};{newline}");
+		List<StatementSyntax> followUps = shape.Value.InitializerProperties
+			.Select(prop => SyntaxFactory.ParseStatement(
+				$"{indentation}{receiverText}.File.{MapMockFileDataInitializerProperty(prop.Key)}({pathText}, {prop.Value.ToString().Trim()});{newline}"))
+			.ToList();
+
+		SyntaxList<StatementSyntax> updatedStatements = block.Statements;
+		int index = updatedStatements.IndexOf(originalStatement);
+		updatedStatements = updatedStatements.Replace(originalStatement, newPrimary);
+		updatedStatements = updatedStatements.InsertRange(index + 1, followUps);
+
+		BlockSyntax newBlock = block.WithStatements(updatedStatements);
+		compilationUnit = compilationUnit.ReplaceNode(block, newBlock);
 		return document.WithSyntaxRoot(compilationUnit);
 	}
 
@@ -519,7 +577,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	private static MockFileDataShape? ClassifyMockFileDataExpression(
 		ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken)
 	{
-		// Only a literal `new MockFileData(...)` (no initializer) is in-scope for Phase 2.
+		// Allow a literal `new MockFileData(...)` and, since Phase 3.5, also one with
+		// an object initializer whose assignments are all to supported properties.
 		InitializerExpressionSyntax? initializer = expression switch
 		{
 			ObjectCreationExpressionSyntax oc => oc.Initializer,
@@ -532,9 +591,26 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			ImplicitObjectCreationExpressionSyntax ic => ic.ArgumentList,
 			_ => null,
 		};
-		if (argList is null || (initializer is not null && initializer.Expressions.Count > 0))
+		if (argList is null)
 		{
 			return null;
+		}
+
+		List<KeyValuePair<string, ExpressionSyntax>> initializerProps = [];
+		if (initializer is not null && initializer.Expressions.Count > 0)
+		{
+			foreach (ExpressionSyntax entry in initializer.Expressions)
+			{
+				if (entry is not AssignmentExpressionSyntax assignment
+				    || assignment.Left is not IdentifierNameSyntax id
+				    || MapMockFileDataInitializerProperty(id.Identifier.Text) is null)
+				{
+					return null;
+				}
+
+				initializerProps.Add(new KeyValuePair<string, ExpressionSyntax>(
+					id.Identifier.Text, assignment.Right));
+			}
 		}
 
 		SymbolInfo info = semanticModel.GetSymbolInfo(expression, cancellationToken);
@@ -551,7 +627,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		    && parameters[0].Type.SpecialType == SpecialType.System_String
 		    && argList.Arguments.Count == 1)
 		{
-			return new MockFileDataShape(MockFileDataKind.Text, argList.Arguments[0].Expression, null);
+			return new MockFileDataShape(
+				MockFileDataKind.Text, argList.Arguments[0].Expression, null, initializerProps);
 		}
 
 		if (parameters.Length == 2
@@ -562,19 +639,27 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return new MockFileDataShape(
 				MockFileDataKind.Text,
 				argList.Arguments[0].Expression,
-				argList.Arguments[1].Expression);
+				argList.Arguments[1].Expression,
+				initializerProps);
 		}
 
 		if (parameters.Length == 1
 		    && parameters[0].Type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, }
 		    && argList.Arguments.Count == 1)
 		{
-			return new MockFileDataShape(MockFileDataKind.Bytes, argList.Arguments[0].Expression, null);
+			return new MockFileDataShape(
+				MockFileDataKind.Bytes, argList.Arguments[0].Expression, null, initializerProps);
 		}
 
 		// MockFileData(MockFileData template) and any other overload are out of scope here.
 		return null;
 	}
+
+	private static string? MapMockFileDataInitializerProperty(string propertyName) => propertyName switch
+	{
+		"Attributes" => "SetAttributes",
+		_ => null,
+	};
 
 	private enum MockFileDataKind
 	{
@@ -584,16 +669,22 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private readonly struct MockFileDataShape
 	{
-		public MockFileDataShape(MockFileDataKind kind, ExpressionSyntax primary, ExpressionSyntax? secondary)
+		public MockFileDataShape(
+			MockFileDataKind kind,
+			ExpressionSyntax primary,
+			ExpressionSyntax? secondary,
+			List<KeyValuePair<string, ExpressionSyntax>> initializerProperties)
 		{
 			Kind = kind;
 			PrimaryContent = primary;
 			SecondaryContent = secondary;
+			InitializerProperties = initializerProperties;
 		}
 
 		public MockFileDataKind Kind { get; }
 		public ExpressionSyntax PrimaryContent { get; }
 		public ExpressionSyntax? SecondaryContent { get; }
+		public List<KeyValuePair<string, ExpressionSyntax>> InitializerProperties { get; }
 	}
 
 	// ── Pattern: MockFileSystem.ctor(files[, options/currentDir]) ────────────
@@ -853,6 +944,222 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		public ExpressionSyntax Key { get; }
 		public MockFileDataShape Value { get; }
 	}
+
+	// ── Pattern: MockFileData property read ──────────────────────────────────
+
+	private static void TryRegisterPropertyReadFix(
+		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
+	{
+		if (!TryMatchOneShotGetFileRead(node, out _, out _, out _, out _))
+		{
+			return;
+		}
+
+		context.RegisterCodeFix(
+			CodeAction.Create(
+				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				ct => ApplyPropertyReadRewriteAsync(context.Document, diagnostic, ct),
+				equivalenceKey: Patterns.MockFileDataPropertyRead),
+			diagnostic);
+	}
+
+	private static async Task<Document> ApplyPropertyReadRewriteAsync(
+		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (root is not CompilationUnitSyntax compilationUnit)
+		{
+			return document;
+		}
+
+		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+		if (node is null
+		    || !TryMatchOneShotGetFileRead(node,
+			    out MemberAccessExpressionSyntax? memberAccess,
+			    out ExpressionSyntax? receiver,
+			    out ArgumentSyntax? pathArg,
+			    out string? newMethod))
+		{
+			return document;
+		}
+
+		InvocationExpressionSyntax replacement = SyntaxFactory.InvocationExpression(
+			SyntaxFactory.MemberAccessExpression(
+				SyntaxKind.SimpleMemberAccessExpression,
+				SyntaxFactory.MemberAccessExpression(
+					SyntaxKind.SimpleMemberAccessExpression,
+					receiver!,
+					SyntaxFactory.IdentifierName("File")),
+				SyntaxFactory.IdentifierName(newMethod!)),
+			SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(pathArg!.WithoutTrivia())));
+
+		compilationUnit = compilationUnit.ReplaceNode(memberAccess!, replacement.WithTriviaFrom(memberAccess!));
+		return document.WithSyntaxRoot(compilationUnit);
+	}
+
+	private static bool TryMatchOneShotGetFileRead(
+		SyntaxNode node,
+		out MemberAccessExpressionSyntax? memberAccess,
+		out ExpressionSyntax? receiver,
+		out ArgumentSyntax? pathArg,
+		out string? newMethod)
+	{
+		memberAccess = node.FirstAncestorOrSelf<MemberAccessExpressionSyntax>();
+		receiver = null;
+		pathArg = null;
+		newMethod = null;
+
+		if (memberAccess is null)
+		{
+			return false;
+		}
+
+		newMethod = MapMockFileDataReadProperty(memberAccess.Name.Identifier.Text);
+		if (newMethod is null)
+		{
+			return false;
+		}
+
+		if (memberAccess.Expression is not InvocationExpressionSyntax invocation
+		    || invocation.Expression is not MemberAccessExpressionSyntax getFileAccess
+		    || getFileAccess.Name.Identifier.Text != "GetFile"
+		    || invocation.ArgumentList.Arguments.Count != 1)
+		{
+			return false;
+		}
+
+		receiver = getFileAccess.Expression;
+		pathArg = invocation.ArgumentList.Arguments[0];
+		return true;
+	}
+
+	private static string? MapMockFileDataReadProperty(string propertyName) => propertyName switch
+	{
+		"TextContents" => "ReadAllText",
+		"Contents" => "ReadAllBytes",
+		"Attributes" => "GetAttributes",
+		// TestableIO returns DateTimeOffset; Testably returns DateTime. We pick the *Utc
+		// variant as the closest semantic match. Downstream code that expects
+		// DateTimeOffset will fail to compile and needs manual adjustment.
+		"CreationTime" => "GetCreationTimeUtc",
+		"LastAccessTime" => "GetLastAccessTimeUtc",
+		"LastWriteTime" => "GetLastWriteTimeUtc",
+		_ => null,
+	};
+
+	// ── Pattern: MockFileData property write (one-shot) ──────────────────────
+
+	private static void TryRegisterPropertyWriteFix(
+		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
+	{
+		if (!TryMatchOneShotGetFileWrite(node, out _, out _, out _, out _, out _, out _))
+		{
+			return;
+		}
+
+		context.RegisterCodeFix(
+			CodeAction.Create(
+				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				ct => ApplyPropertyWriteRewriteAsync(context.Document, diagnostic, ct),
+				equivalenceKey: Patterns.MockFileDataPropertyWrite),
+			diagnostic);
+	}
+
+	private static async Task<Document> ApplyPropertyWriteRewriteAsync(
+		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (root is not CompilationUnitSyntax compilationUnit)
+		{
+			return document;
+		}
+
+		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+		if (node is null
+		    || !TryMatchOneShotGetFileWrite(node,
+			    out _,
+			    out ExpressionStatementSyntax? statement,
+			    out ExpressionSyntax? receiver,
+			    out ArgumentSyntax? pathArg,
+			    out ExpressionSyntax? value,
+			    out string? newMethod))
+		{
+			return document;
+		}
+
+		// Build the new statement via ParseStatement(text) so the trivia is non-elastic;
+		// otherwise the Formatter normalizes the inserted statement and the enclosing
+		// block's closing brace, breaking the surrounding indentation style.
+		string receiverText = receiver!.ToString().Trim();
+		string pathText = pathArg!.ToString().Trim();
+		string valueText = value!.ToString().Trim();
+		string text = $"{receiverText}.File.{newMethod!}({pathText}, {valueText});";
+		StatementSyntax parsed = SyntaxFactory.ParseStatement(text);
+		StatementSyntax newStatement = parsed.WithTriviaFrom(statement!);
+
+		compilationUnit = compilationUnit.ReplaceNode(statement!, newStatement);
+		return document.WithSyntaxRoot(compilationUnit);
+	}
+
+	private static bool TryMatchOneShotGetFileWrite(
+		SyntaxNode node,
+		out AssignmentExpressionSyntax? assignment,
+		out ExpressionStatementSyntax? statement,
+		out ExpressionSyntax? receiver,
+		out ArgumentSyntax? pathArg,
+		out ExpressionSyntax? value,
+		out string? newMethod)
+	{
+		assignment = null;
+		statement = null;
+		receiver = null;
+		pathArg = null;
+		value = null;
+		newMethod = null;
+
+		MemberAccessExpressionSyntax? memberAccess = node.FirstAncestorOrSelf<MemberAccessExpressionSyntax>();
+		if (memberAccess is null)
+		{
+			return false;
+		}
+
+		newMethod = MapMockFileDataWriteProperty(memberAccess.Name.Identifier.Text);
+		if (newMethod is null)
+		{
+			return false;
+		}
+
+		if (memberAccess.Expression is not InvocationExpressionSyntax invocation
+		    || invocation.Expression is not MemberAccessExpressionSyntax getFileAccess
+		    || getFileAccess.Name.Identifier.Text != "GetFile"
+		    || invocation.ArgumentList.Arguments.Count != 1)
+		{
+			return false;
+		}
+
+		if (memberAccess.Parent is not AssignmentExpressionSyntax found
+		    || !found.IsKind(SyntaxKind.SimpleAssignmentExpression)
+		    || found.Left != memberAccess
+		    || found.Parent is not ExpressionStatementSyntax foundStatement)
+		{
+			return false;
+		}
+
+		receiver = getFileAccess.Expression;
+		pathArg = invocation.ArgumentList.Arguments[0];
+		assignment = found;
+		value = found.Right;
+		statement = foundStatement;
+		return true;
+	}
+
+	private static string? MapMockFileDataWriteProperty(string propertyName) => propertyName switch
+	{
+		"TextContents" => "WriteAllText",
+		"Contents" => "WriteAllBytes",
+		"Attributes" => "SetAttributes",
+		_ => null,
+	};
 
 	// ── Shared: using-directive swap ─────────────────────────────────────────
 
