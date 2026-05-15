@@ -1517,10 +1517,13 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		}
 
 		// The Testably target (`fileSystem.InitializeEmbeddedResourcesFromAssembly(...)`)
-		// is an extension method on `IFileSystem`. We therefore only need the receiver to
-		// resolve to *something* that implements `IFileSystem` — concrete TestableIO
-		// `MockFileSystem` does. Calling through the `IMockFileDataAccessor` interface
-		// would not work because the interface does not extend `IFileSystem`.
+		// is an extension method on `IFileSystem`, so any `IFileSystem`-implementing
+		// receiver would in principle bind. We deliberately tighten that to the concrete
+		// TestableIO `MockFileSystem` via `IsConcreteMockFileSystemReceiver`: it is the
+		// receiver shape this migration is designed to flag, and it keeps the gate
+		// consistent with sibling accessor fixes (AddFile, AddDirectory, etc.). The
+		// `IMockFileDataAccessor` interface in particular does NOT extend `IFileSystem`,
+		// so the rewritten call would not bind through that path.
 		SemanticModel? semanticModel = await context.Document
 			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
 		if (semanticModel is null
