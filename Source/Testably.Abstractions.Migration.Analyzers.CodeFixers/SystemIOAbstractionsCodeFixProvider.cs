@@ -105,7 +105,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => RewriteUsingsAsync(context.Document, ct),
 				equivalenceKey: Patterns.MockFileSystemDefaultConstructor),
 			diagnostic);
@@ -174,7 +174,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyOptionsCtorRewriteAsync(context.Document, diagnostic, ct),
 				equivalenceKey: Patterns.MockFileSystemOptionsConstructor),
 			diagnostic);
@@ -325,7 +325,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyAccessorMethodRewriteAsync(context.Document, diagnostic, pattern, ct),
 				equivalenceKey: pattern),
 			diagnostic);
@@ -459,7 +459,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyAddFileRewriteAsync(context.Document, diagnostic, ct),
 				equivalenceKey: Patterns.AccessorAddFile),
 			diagnostic);
@@ -762,7 +762,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyFilesCtorRewriteAsync(context.Document, diagnostic, pattern, ct),
 				equivalenceKey: pattern),
 			diagnostic);
@@ -1010,7 +1010,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyPropertyReadRewriteAsync(context.Document, diagnostic, ct),
 				equivalenceKey: Patterns.MockFileDataPropertyRead),
 			diagnostic);
@@ -1122,7 +1122,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		context.RegisterCodeFix(
 			CodeAction.Create(
-				Resources.TestablyAbstractionsMigration001CodeFixTitle,
+				Resources.TestablyM001CodeFixTitle,
 				ct => ApplyPropertyWriteRewriteAsync(context.Document, diagnostic, ct),
 				equivalenceKey: Patterns.MockFileDataPropertyWrite),
 			diagnostic);

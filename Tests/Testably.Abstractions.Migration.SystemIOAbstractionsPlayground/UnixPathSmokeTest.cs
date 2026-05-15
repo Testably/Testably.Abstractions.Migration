@@ -1,9 +1,3 @@
-// Playground samples deliberately exercise the un-migrated API surface so the analyzer
-// and fixer can be developed against them. The fixer-parity check runs over this file's
-// content via the code-fix pipeline, not the normal build, so the in-source diagnostic
-// is suppressed here to keep static-analysis dashboards quiet.
-#pragma warning disable TestablyAbstractionsMigration001
-
 using System.IO.Abstractions.TestingHelpers;
 
 namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
@@ -12,22 +6,20 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 ///     Smoke test for the path-semantics divergence risk identified in Phase 1: rooted
 ///     Unix-style paths (e.g. <c>/etc/hosts</c>) are accepted by
 ///     <see cref="MockFileSystem" /> on Windows but may behave differently under
-///     <see cref="Testably.Abstractions.Testing.MockFileSystem" />.
+///     <see cref="Testably.Abstractions.Testing.MockFileSystem" />. The migration code
+///     fix does not touch the path strings, so any divergence surfaces here.
 /// </summary>
-/// <remarks>
-///     The class is a runnable executable in the playground. The body deliberately performs
-///     a read after a write so the smoke test surfaces any divergence as a test failure
-///     rather than a silent regression.
-/// </remarks>
-public static class UnixPathSmokeTest
+public class UnixPathSmokeTest
 {
-	public const string UnixStylePath = "/etc/hosts";
-	public const string Contents = "127.0.0.1 localhost";
-
-	public static string RoundTrip()
+	[Fact]
+	public async Task RoundTrip_OnRootedUnixPath_ReturnsWrittenContents()
 	{
-		MockFileSystem fileSystem = new();
-		fileSystem.File.WriteAllText(UnixStylePath, Contents);
-		return fileSystem.File.ReadAllText(UnixStylePath);
+		MockFileSystem fs = new();
+		fs.Directory.CreateDirectory("/etc");
+		fs.File.WriteAllText("/etc/hosts", "127.0.0.1 localhost");
+
+		string contents = fs.File.ReadAllText("/etc/hosts");
+
+		await That(contents).IsEqualTo("127.0.0.1 localhost");
 	}
 }

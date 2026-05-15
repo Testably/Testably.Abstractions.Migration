@@ -5,7 +5,7 @@ using Verifier =
 
 namespace Testably.Abstractions.Migration.Tests;
 
-public class SystemIOAbstractionsAnalyzerTests
+public sealed class SystemIOAbstractionsAnalyzerTests
 {
 	[Fact]
 	public async Task ParameterlessConstructor_ShouldBeFlagged()

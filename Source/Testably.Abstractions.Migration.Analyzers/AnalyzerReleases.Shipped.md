@@ -4,4 +4,4 @@
 
  Rule ID                            | Category | Severity | Notes                                       
 ------------------------------------|----------|----------|---------------------------------------------
- TestablyAbstractionsMigration001   | Usage    | Warning  | System.IO.Abstractions should be migrated.  
+ TestablyM001   | Usage    | Warning  | System.IO.Abstractions should be migrated.  
