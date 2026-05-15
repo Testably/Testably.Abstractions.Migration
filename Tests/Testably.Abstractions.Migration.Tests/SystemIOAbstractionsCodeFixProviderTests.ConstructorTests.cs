@@ -388,6 +388,133 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Fact]
+		public async Task FilesConstructor_NonRootParent_EmitsCreateDirectoryFollowUp()
+		{
+			// The `Dictionary<string, MockFileData>` constructor auto-creates each
+			// entry's parent directory. The Testably API's WriteAllText does not, so
+			// the fixer emits a CreateDirectory call per unique non-root parent.
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/etc/hosts"] = new MockFileData("127.0.0.1 localhost"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.Directory.CreateDirectory("/etc");
+						fs.File.WriteAllText("/etc/hosts", "127.0.0.1 localhost");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task FilesConstructor_SharedParent_EmitsCreateDirectoryOnce()
+		{
+			// Two entries share the same parent — only one CreateDirectory is emitted.
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/work/a.txt"] = new MockFileData("a"),
+							["/work/b.txt"] = new MockFileData("b"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.Directory.CreateDirectory("/work");
+						fs.File.WriteAllText("/work/a.txt", "a");
+						fs.File.WriteAllText("/work/b.txt", "b");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task FilesConstructor_NonLiteralKey_SkipsCreateDirectory()
+		{
+			// Non-literal keys can't be resolved at fix time. The fixer emits the
+			// write call but leaves parent-directory creation to the user.
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(string path)
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							[path] = new MockFileData("hello"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(string path)
+					{
+						var fs = new MockFileSystem();
+						fs.File.WriteAllText(path, "hello");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
 		public async Task FilesOptionsConstructor_ShouldFoldOptionsAndExpandEntries()
 		{
 			const string source = """
