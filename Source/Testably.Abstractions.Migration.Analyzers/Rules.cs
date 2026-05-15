@@ -10,7 +10,7 @@ public static class Rules
 	private const string UsageCategory = "Usage";
 
 	private const string DocsBaseUrl =
-		"https://docs.testably.org/Testably.Abstractions/Migration";
+		"https://docs.testably.org/Abstractions/Migration";
 
 	/// <summary>
 	///     Migration rule for <c>System.IO.Abstractions.TestingHelpers</c> usage. Flags any usage of
