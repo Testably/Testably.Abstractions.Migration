@@ -9,7 +9,7 @@
 		<Copyright>Copyright (c) 2026 - $([System.DateTime]::Now.ToString('yyyy')) Valentin Breuß</Copyright>
 		<RepositoryUrl>https://github.com/Testably/Testably.Abstractions.Migration.git</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<PackageProjectUrl>https://docs.testably.org/Testably.Abstractions/Migration</PackageProjectUrl>
+		<PackageProjectUrl>https://docs.testably.org/Abstractions/Migration</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageIcon>Docs/logo.png</PackageIcon>
 		<PackageReadmeFile>Docs/README.md</PackageReadmeFile>
