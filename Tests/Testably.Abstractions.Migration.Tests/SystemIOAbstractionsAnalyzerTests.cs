@@ -124,6 +124,24 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
+	[Fact]
+	public async Task AddDrive_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+					=> {|#0:fs.AddDrive("D:", new MockDriveData())|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
 	[Theory]
 	[InlineData("TextContents")]
 	[InlineData("Contents")]

@@ -386,5 +386,297 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Fact]
+		public async Task AddDrive_EmptyInitializer_ShouldRewriteToWithDrive()
+		{
+			// `new MockDriveData()` with no initializer has nothing to chain — the
+			// rewrite collapses to the single-argument WithDrive overload. The using
+			// must also swap, since WithDrive is Testably-only.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs) => {|#0:fs.AddDrive("D:", new MockDriveData())|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs) => fs.WithDrive("D:");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_TotalSizeOnly_ShouldRewriteToWithDriveLambda()
+		{
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new MockDriveData { TotalSize = 100 })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.WithDrive("D:", d => d.SetTotalSize(100));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_AllMappableProperties_ShouldChainSetters()
+		{
+			// Initializer order is preserved in the chained call so the user can verify
+			// any sequence-dependent behaviour by reading the rewrite top-down.
+			const string source = """
+				using System.IO;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+					{
+						{|#0:fs.AddDrive("D:", new MockDriveData
+						{
+							TotalSize = 100,
+							IsReady = false,
+							DriveFormat = "NTFS",
+							DriveType = DriveType.Fixed,
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+					{
+						fs.WithDrive("D:", d => d.SetTotalSize(100).SetIsReady(false).SetDriveFormat("NTFS").SetDriveType(DriveType.Fixed));
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_TargetTypedNew_ShouldRewriteToWithDrive()
+		{
+			// `new() { ... }` resolves to MockDriveData via the AddDrive parameter type;
+			// the rewrite path treats it the same as an explicit `new MockDriveData()`.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new() { TotalSize = 200 })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.WithDrive("D:", d => d.SetTotalSize(200));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_ShadowingDriveIdentifier_PicksFreshLambdaParameter()
+		{
+			// The initializer RHS references an outer `d`; the rewrite must not let the
+			// lambda parameter shadow it. PickFreshDriveLambdaParameterName falls through
+			// to `drive` (next candidate).
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, long d)
+						=> {|#0:fs.AddDrive("D:", new MockDriveData { TotalSize = d })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, long d)
+						=> fs.WithDrive("D:", drive => drive.SetTotalSize(d));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_InterfaceTypedReceiver_HasNoFix()
+		{
+			// The rewrite emits `<receiver>.WithDrive(...)`. IMockFileDataAccessor has no
+			// WithDrive, so the fix must not run when the user calls through the
+			// interface.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(IMockFileDataAccessor accessor)
+						=> {|#0:accessor.AddDrive("D:", new MockDriveData())|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_NonLiteralMockDriveData_HasNoFix()
+		{
+			// A captured MockDriveData reference (parameter, local, field, etc.) has no
+			// safe textual rewrite — the user may pass a subclass or mutate the data.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, MockDriveData data)
+						=> {|#0:fs.AddDrive("D:", data)|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_UnsupportedInitializerProperty_HasNoFix()
+		{
+			// AvailableFreeSpace has no IStorageDrive setter — manual review required.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new MockDriveData { AvailableFreeSpace = 50 })|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_CopyConstructor_HasNoFix()
+		{
+			// `new MockDriveData(template)` has no 1:1 mapping to a single WithDrive
+			// callback — the user might tweak fields after the copy.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, MockDriveData template)
+						=> {|#0:fs.AddDrive("D:", new MockDriveData(template))|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_FullyQualifiedReceiverDeclaration_HasNoFix()
+		{
+			// The parameter declaration uses the fully-qualified type name, so the
+			// using-swap can't retarget the receiver — after the swap, `fs` still binds
+			// to TestableIO MockFileSystem and `fs.WithDrive(...)` would not compile.
+			const string source = """
+				public class C
+				{
+					public void Run(System.IO.Abstractions.TestingHelpers.MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new System.IO.Abstractions.TestingHelpers.MockDriveData())|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_AliasQualifiedReceiverDeclaration_HasNoFix()
+		{
+			// The parameter declaration is alias-qualified (`TestableIo.MockFileSystem`).
+			// The using-swap touches `using System.IO.Abstractions.TestingHelpers;` but
+			// leaves the alias `using TestableIo = ...;` in place, so `fs` stays bound to
+			// TestableIO and the rewrite would not compile.
+			const string source = """
+				using TestableIo = System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(TestableIo.MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new TestableIo.MockDriveData())|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

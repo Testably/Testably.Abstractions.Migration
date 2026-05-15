@@ -112,4 +112,39 @@ public class AccessorMethodTests
 
 		await That(fs.FileExists("/a")).IsFalse();
 	}
+
+	[Fact]
+	public async Task AddDrive_EmptyData_RegistersDrive()
+	{
+		MockFileSystem fs = new();
+		fs.AddDrive("D:", new MockDriveData());
+
+		IDriveInfo? drive = FindDriveByName(fs.DriveInfo.GetDrives(), "D:");
+		await That(drive).IsNotNull();
+	}
+
+	[Fact]
+	public async Task AddDrive_WithTotalSize_RegistersDriveWithSize()
+	{
+		const long totalSize = 1024L * 1024L;
+		MockFileSystem fs = new();
+		fs.AddDrive("E:", new MockDriveData { TotalSize = totalSize });
+
+		IDriveInfo? drive = FindDriveByName(fs.DriveInfo.GetDrives(), "E:");
+		await That(drive).IsNotNull();
+		await That(drive!.TotalSize).IsEqualTo(totalSize);
+	}
+
+	private static IDriveInfo? FindDriveByName(IDriveInfo[] drives, string prefix)
+	{
+		foreach (IDriveInfo drive in drives)
+		{
+			if (drive.Name.StartsWith(prefix, StringComparison.Ordinal))
+			{
+				return drive;
+			}
+		}
+
+		return null;
+	}
 }

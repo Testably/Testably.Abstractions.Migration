@@ -89,6 +89,10 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				case Patterns.MockFileDataPropertyWrite:
 					TryRegisterPropertyWriteFix(context, diagnostic, node);
 					break;
+				case Patterns.MockFileSystemAddDrive:
+					await TryRegisterAddDriveFixAsync(context, diagnostic, node)
+						.ConfigureAwait(false);
+					break;
 			}
 		}
 	}
@@ -1226,6 +1230,273 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		"TextContents" => "WriteAllText",
 		"Contents" => "WriteAllBytes",
 		"Attributes" => "SetAttributes",
+		_ => null,
+	};
+
+	// ── Pattern: MockFileSystem.AddDrive ─────────────────────────────────────
+
+	private static async Task TryRegisterAddDriveFixAsync(
+		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
+	{
+		InvocationExpressionSyntax? invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
+		    || invocation.ArgumentList.Arguments.Count != 2)
+		{
+			return;
+		}
+
+		// The rewrite emits `<receiver>.WithDrive(...)`. WithDrive is Testably-only, so
+		// we must swap the using as part of the fix. The semantic check confirms the
+		// receiver is currently typed as TestableIO MockFileSystem; the syntactic check
+		// below confirms the declaration's type syntax can actually be retargeted by
+		// the using swap (alias- or fully-qualified declarations stay bound to
+		// TestableIO after the swap, so the rewrite would produce non-compiling code).
+		SemanticModel? semanticModel = await context.Document
+			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+		if (semanticModel is null
+		    || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel)
+		    || !IsRetargetableMockFileSystemReceiver(memberAccess.Expression, semanticModel))
+		{
+			return;
+		}
+
+		if (!TryClassifyMockDriveDataInitializer(invocation.ArgumentList.Arguments[1].Expression, out _))
+		{
+			return;
+		}
+
+		context.RegisterCodeFix(
+			CodeAction.Create(
+				Resources.TestablyM001CodeFixTitle,
+				ct => ApplyAddDriveRewriteAsync(context.Document, diagnostic, ct),
+				equivalenceKey: Patterns.MockFileSystemAddDrive),
+			diagnostic);
+	}
+
+	private static bool IsRetargetableMockFileSystemReceiver(
+		ExpressionSyntax receiver, SemanticModel semanticModel)
+	{
+		// Direct construction: the construction expression itself is what the swap
+		// retargets, so re-use the constructor-level gate.
+		if (receiver is BaseObjectCreationExpressionSyntax creation)
+		{
+			return HasUnqualifiedMockFileSystemTypeName(creation);
+		}
+
+		// Symbol references (locals, parameters, fields, properties, method results):
+		// inspect the declared type syntax. The swap only retargets unqualified
+		// `MockFileSystem` (or `var` resolved from an unqualified initializer). Alias-
+		// qualified (`TestableIo.MockFileSystem`) and fully-qualified
+		// (`System.IO.Abstractions.TestingHelpers.MockFileSystem`) declarations stay
+		// bound to TestableIO after the swap, so the rewrite would emit `WithDrive` on
+		// the old MockFileSystem and fail to compile.
+		ISymbol? symbol = semanticModel.GetSymbolInfo(receiver).Symbol;
+		if (symbol is null || symbol.DeclaringSyntaxReferences.Length == 0)
+		{
+			return false;
+		}
+
+		foreach (SyntaxReference declRef in symbol.DeclaringSyntaxReferences)
+		{
+			TypeSyntax? declaredType = declRef.GetSyntax() switch
+			{
+				VariableDeclaratorSyntax v => (v.Parent as VariableDeclarationSyntax)?.Type,
+				ParameterSyntax p => p.Type,
+				PropertyDeclarationSyntax pd => pd.Type,
+				MethodDeclarationSyntax md => md.ReturnType,
+				_ => null,
+			};
+
+			if (declaredType is null || !IsUnqualifiedMockFileSystemTypeSyntax(declaredType))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static bool IsUnqualifiedMockFileSystemTypeSyntax(TypeSyntax typeSyntax)
+		=> typeSyntax switch
+		{
+			IdentifierNameSyntax => true,
+			NullableTypeSyntax nullable => IsUnqualifiedMockFileSystemTypeSyntax(nullable.ElementType),
+			_ => false,
+		};
+
+	private static async Task<Document> ApplyAddDriveRewriteAsync(
+		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (root is not CompilationUnitSyntax compilationUnit)
+		{
+			return document;
+		}
+
+		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
+		    || invocation.ArgumentList.Arguments.Count != 2)
+		{
+			return document;
+		}
+
+		ArgumentSyntax driveNameArg = invocation.ArgumentList.Arguments[0];
+		ExpressionSyntax driveDataExpr = invocation.ArgumentList.Arguments[1].Expression;
+		if (!TryClassifyMockDriveDataInitializer(driveDataExpr,
+			    out List<AssignmentExpressionSyntax>? assignments))
+		{
+			return document;
+		}
+
+		InvocationExpressionSyntax replacement = BuildWithDriveInvocation(
+			memberAccess.Expression, driveNameArg, assignments);
+		compilationUnit = compilationUnit.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
+		compilationUnit = SwapToTestablyUsing(compilationUnit);
+		return document.WithSyntaxRoot(compilationUnit);
+	}
+
+	private static bool TryClassifyMockDriveDataInitializer(
+		ExpressionSyntax driveDataExpr,
+		out List<AssignmentExpressionSyntax>? assignments)
+	{
+		assignments = null;
+
+		ArgumentListSyntax? argumentList;
+		InitializerExpressionSyntax? initializer;
+		switch (driveDataExpr)
+		{
+			case ObjectCreationExpressionSyntax explicitCreation:
+				argumentList = explicitCreation.ArgumentList;
+				initializer = explicitCreation.Initializer;
+				break;
+			case ImplicitObjectCreationExpressionSyntax implicitCreation:
+				argumentList = implicitCreation.ArgumentList;
+				initializer = implicitCreation.Initializer;
+				break;
+			default:
+				return false;
+		}
+
+		// Reject ctor overloads with arguments (e.g. the MockDriveData copy ctor) —
+		// they have no 1:1 mapping to WithDrive's lambda surface.
+		if (argumentList is { Arguments.Count: > 0, })
+		{
+			return false;
+		}
+
+		assignments = [];
+		if (initializer is null)
+		{
+			return true;
+		}
+
+		foreach (ExpressionSyntax expression in initializer.Expressions)
+		{
+			if (expression is not AssignmentExpressionSyntax assignment
+			    || assignment.Left is not IdentifierNameSyntax property
+			    || MapMockDriveDataProperty(property.Identifier.Text) is null)
+			{
+				assignments = null;
+				return false;
+			}
+
+			assignments.Add(assignment);
+		}
+
+		return true;
+	}
+
+	private static InvocationExpressionSyntax BuildWithDriveInvocation(
+		ExpressionSyntax receiver,
+		ArgumentSyntax driveNameArg,
+		List<AssignmentExpressionSyntax> assignments)
+	{
+		MemberAccessExpressionSyntax withDriveAccess = SyntaxFactory.MemberAccessExpression(
+			SyntaxKind.SimpleMemberAccessExpression,
+			receiver,
+			SyntaxFactory.IdentifierName("WithDrive"));
+
+		// Strip NameColon from the kept drive-name argument: TestableIO uses
+		// `name`, Testably uses `drive` — positional binding is the safe shape.
+		ArgumentSyntax nameArg = driveNameArg.WithNameColon(null);
+
+		if (assignments.Count == 0)
+		{
+			return SyntaxFactory.InvocationExpression(
+				withDriveAccess,
+				SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(nameArg)));
+		}
+
+		SimpleLambdaExpressionSyntax lambda = BuildWithDriveLambda(assignments);
+		return SyntaxFactory.InvocationExpression(
+			withDriveAccess,
+			SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(
+				new[] { nameArg, SyntaxFactory.Argument(lambda), })));
+	}
+
+	private static SimpleLambdaExpressionSyntax BuildWithDriveLambda(
+		List<AssignmentExpressionSyntax> assignments)
+	{
+		// Avoid shadowing identifiers used in any of the initializer RHS expressions.
+		string parameterName = PickFreshDriveLambdaParameterName(assignments);
+		ExpressionSyntax body = SyntaxFactory.IdentifierName(parameterName);
+		foreach (AssignmentExpressionSyntax assignment in assignments)
+		{
+			string propertyName = ((IdentifierNameSyntax)assignment.Left).Identifier.Text;
+			string setter = MapMockDriveDataProperty(propertyName)!;
+			body = SyntaxFactory.InvocationExpression(
+				SyntaxFactory.MemberAccessExpression(
+					SyntaxKind.SimpleMemberAccessExpression,
+					body,
+					SyntaxFactory.IdentifierName(setter)),
+				SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+					SyntaxFactory.Argument(assignment.Right.WithoutTrivia()))));
+		}
+
+		return SyntaxFactory.SimpleLambdaExpression(
+			SyntaxFactory.Parameter(SyntaxFactory.Identifier(parameterName)),
+			body);
+	}
+
+	private static string PickFreshDriveLambdaParameterName(List<AssignmentExpressionSyntax> assignments)
+	{
+		HashSet<string> used = [];
+		foreach (AssignmentExpressionSyntax assignment in assignments)
+		{
+			foreach (IdentifierNameSyntax id in assignment.Right.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+			{
+				used.Add(id.Identifier.Text);
+			}
+		}
+
+		string[] candidates = ["d", "drive", "driveBuilder",];
+		foreach (string candidate in candidates)
+		{
+			if (!used.Contains(candidate))
+			{
+				return candidate;
+			}
+		}
+
+		for (int i = 1;; i++)
+		{
+			string n = $"d{i}";
+			if (!used.Contains(n))
+			{
+				return n;
+			}
+		}
+	}
+
+	private static string? MapMockDriveDataProperty(string propertyName) => propertyName switch
+	{
+		"TotalSize" => "SetTotalSize",
+		"IsReady" => "SetIsReady",
+		"DriveFormat" => "SetDriveFormat",
+		"DriveType" => "SetDriveType",
+		// AvailableFreeSpace, TotalFreeSpace and VolumeLabel have no IStorageDrive
+		// setter equivalent — fall through to manual review.
 		_ => null,
 	};
 

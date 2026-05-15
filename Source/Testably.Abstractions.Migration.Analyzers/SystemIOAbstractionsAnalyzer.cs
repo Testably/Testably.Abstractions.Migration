@@ -230,9 +230,13 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		                        && invocation.TargetMethod.Parameters[0].Type.SpecialType == SpecialType.System_String
 		                        && invocation.Arguments.Length == 1;
 
-		string pattern = isOneShotGetFile
-			? (isWrite ? Patterns.MockFileDataPropertyWrite : Patterns.MockFileDataPropertyRead)
-			: (isWrite ? Patterns.MockFileDataCapturedReferenceWrite : Patterns.MockFileDataCapturedReferenceRead);
+		string pattern = (isOneShotGetFile, isWrite) switch
+		{
+			(true, true) => Patterns.MockFileDataPropertyWrite,
+			(true, false) => Patterns.MockFileDataPropertyRead,
+			(false, true) => Patterns.MockFileDataCapturedReferenceWrite,
+			(false, false) => Patterns.MockFileDataCapturedReferenceRead,
+		};
 
 		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}
@@ -278,6 +282,7 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		"RemoveFile" => Patterns.AccessorRemoveFile,
 		"MoveDirectory" => Patterns.AccessorMoveDirectory,
 		"FileExists" => Patterns.AccessorFileExists,
+		"AddDrive" => Patterns.MockFileSystemAddDrive,
 		_ => null,
 	};
 

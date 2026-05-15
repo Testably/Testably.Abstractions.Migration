@@ -51,6 +51,12 @@ public static class Patterns
 	/// <summary><c>accessor.FileExists(path)</c>.</summary>
 	public const string AccessorFileExists = "accessor.FileExists";
 
+	/// <summary>
+	///     <c>fs.AddDrive(name, mockDriveData)</c>; rewrites to
+	///     <c>fs.WithDrive(name, d =&gt; d.SetTotalSize(...).SetIsReady(...))</c>.
+	/// </summary>
+	public const string MockFileSystemAddDrive = "MockFileSystem.AddDrive";
+
 	// ── MockFileData property access ──────────────────────────────────────
 
 	/// <summary>A read access to a <c>MockFileData</c> property.</summary>
