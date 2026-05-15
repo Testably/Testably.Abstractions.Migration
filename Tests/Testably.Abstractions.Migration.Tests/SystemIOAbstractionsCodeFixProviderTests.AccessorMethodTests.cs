@@ -635,5 +635,48 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Fact]
+		public async Task AddDrive_FullyQualifiedReceiverDeclaration_HasNoFix()
+		{
+			// The parameter declaration uses the fully-qualified type name, so the
+			// using-swap can't retarget the receiver — after the swap, `fs` still binds
+			// to TestableIO MockFileSystem and `fs.WithDrive(...)` would not compile.
+			const string source = """
+				public class C
+				{
+					public void Run(System.IO.Abstractions.TestingHelpers.MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new System.IO.Abstractions.TestingHelpers.MockDriveData())|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddDrive_AliasQualifiedReceiverDeclaration_HasNoFix()
+		{
+			// The parameter declaration is alias-qualified (`TestableIo.MockFileSystem`).
+			// The using-swap touches `using System.IO.Abstractions.TestingHelpers;` but
+			// leaves the alias `using TestableIo = ...;` in place, so `fs` stays bound to
+			// TestableIO and the rewrite would not compile.
+			const string source = """
+				using TestableIo = System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(TestableIo.MockFileSystem fs)
+						=> {|#0:fs.AddDrive("D:", new TestableIo.MockDriveData())|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

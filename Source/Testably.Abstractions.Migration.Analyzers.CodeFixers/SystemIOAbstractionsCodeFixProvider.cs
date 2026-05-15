@@ -1246,11 +1246,16 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		}
 
 		// The rewrite emits `<receiver>.WithDrive(...)`. WithDrive is Testably-only, so
-		// we must swap the using as part of the fix. Gating on the concrete TestableIO
-		// receiver type ensures we only run when the swap is well-defined.
+		// we must swap the using as part of the fix. The semantic check confirms the
+		// receiver is currently typed as TestableIO MockFileSystem; the syntactic check
+		// below confirms the declaration's type syntax can actually be retargeted by
+		// the using swap (alias- or fully-qualified declarations stay bound to
+		// TestableIO after the swap, so the rewrite would produce non-compiling code).
 		SemanticModel? semanticModel = await context.Document
 			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
-		if (semanticModel is null || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel))
+		if (semanticModel is null
+		    || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel)
+		    || !IsRetargetableMockFileSystemReceiver(memberAccess.Expression, semanticModel))
 		{
 			return;
 		}
@@ -1267,6 +1272,57 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				equivalenceKey: Patterns.MockFileSystemAddDrive),
 			diagnostic);
 	}
+
+	private static bool IsRetargetableMockFileSystemReceiver(
+		ExpressionSyntax receiver, SemanticModel semanticModel)
+	{
+		// Direct construction: the construction expression itself is what the swap
+		// retargets, so re-use the constructor-level gate.
+		if (receiver is BaseObjectCreationExpressionSyntax creation)
+		{
+			return HasUnqualifiedMockFileSystemTypeName(creation);
+		}
+
+		// Symbol references (locals, parameters, fields, properties, method results):
+		// inspect the declared type syntax. The swap only retargets unqualified
+		// `MockFileSystem` (or `var` resolved from an unqualified initializer). Alias-
+		// qualified (`TestableIo.MockFileSystem`) and fully-qualified
+		// (`System.IO.Abstractions.TestingHelpers.MockFileSystem`) declarations stay
+		// bound to TestableIO after the swap, so the rewrite would emit `WithDrive` on
+		// the old MockFileSystem and fail to compile.
+		ISymbol? symbol = semanticModel.GetSymbolInfo(receiver).Symbol;
+		if (symbol is null || symbol.DeclaringSyntaxReferences.Length == 0)
+		{
+			return false;
+		}
+
+		foreach (SyntaxReference declRef in symbol.DeclaringSyntaxReferences)
+		{
+			TypeSyntax? declaredType = declRef.GetSyntax() switch
+			{
+				VariableDeclaratorSyntax v => (v.Parent as VariableDeclarationSyntax)?.Type,
+				ParameterSyntax p => p.Type,
+				PropertyDeclarationSyntax pd => pd.Type,
+				MethodDeclarationSyntax md => md.ReturnType,
+				_ => null,
+			};
+
+			if (declaredType is null || !IsUnqualifiedMockFileSystemTypeSyntax(declaredType))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static bool IsUnqualifiedMockFileSystemTypeSyntax(TypeSyntax typeSyntax)
+		=> typeSyntax switch
+		{
+			IdentifierNameSyntax => true,
+			NullableTypeSyntax nullable => IsUnqualifiedMockFileSystemTypeSyntax(nullable.ElementType),
+			_ => false,
+		};
 
 	private static async Task<Document> ApplyAddDriveRewriteAsync(
 		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
