@@ -427,5 +427,26 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				fixedSource);
 		}
+
+		[Fact]
+		public async Task MockFileSystemSubclass_HasNoFix()
+		{
+			// User-defined MockFileSystem subclasses don't have a Testably equivalent —
+			// inheritance hooks differ across libraries. The analyzer flags the class
+			// declaration; the code-fix provider intentionally falls through with no
+			// rewrite.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class {|#0:MyFs|} : MockFileSystem
+				{
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

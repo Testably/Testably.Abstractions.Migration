@@ -54,4 +54,39 @@ public class ManualReviewTests
 		await That(info.FileVersion).IsEqualTo("1.2.3");
 		await That(info.ProductName).IsEqualTo("Sample");
 	}
+
+	[Fact]
+	public async Task MockFileSystemSubclass_BehavesAsMockFileSystem()
+	{
+		MyMockFs fs = new();
+		fs.AddFile("/a", new MockFileData("hello"));
+
+		await That(fs.File.ReadAllText("/a")).IsEqualTo("hello");
+	}
+
+	[Fact]
+	public async Task MockFileDataSubclass_BehavesAsMockFileData()
+	{
+		MyMockFileData data = new();
+
+		await That(data.TextContents).IsEqualTo("hello");
+	}
+
+	[Fact]
+	public async Task MockFileData_CopyConstructor_ClonesTextContents()
+	{
+		MockFileData template = new("hello");
+		MockFileData clone = new(template);
+
+		await That(clone.TextContents).IsEqualTo("hello");
+	}
+
+	private sealed class MyMockFs : MockFileSystem
+	{
+	}
+
+	private sealed class MyMockFileData : MockFileData
+	{
+		public MyMockFileData() : base("hello") { }
+	}
 }

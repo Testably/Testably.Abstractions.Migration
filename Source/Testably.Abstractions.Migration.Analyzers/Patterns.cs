@@ -76,4 +76,13 @@ public static class Patterns
 
 	/// <summary><c>new MockFileVersionInfo(...)</c> — file version metadata has no Testably equivalent.</summary>
 	public const string MockFileVersionInfoConstructor = "MockFileVersionInfo.ctor";
+
+	/// <summary>A user-defined class derives from <c>MockFileSystem</c>; the inheritance contract differs in Testably.</summary>
+	public const string MockFileSystemSubclass = "MockFileSystem.subclass";
+
+	/// <summary>A user-defined class derives from <c>MockFileData</c>; there is no Testably equivalent.</summary>
+	public const string MockFileDataSubclass = "MockFileData.subclass";
+
+	/// <summary><c>new MockFileData(MockFileData template)</c> — clone semantics differ; no Testably equivalent.</summary>
+	public const string MockFileDataCopyConstructor = "MockFileData.copyCtor";
 }
