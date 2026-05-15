@@ -179,13 +179,35 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 
 	private static void AnalyzePropertyReference(OperationAnalysisContext context, TestableIoSymbols symbols)
 	{
-		if (symbols.MockFileData is null
-		    || context.Operation is not IPropertyReferenceOperation propertyRef)
+		if (context.Operation is not IPropertyReferenceOperation propertyRef)
 		{
 			return;
 		}
 
-		if (!SymbolEqualityComparer.Default.Equals(propertyRef.Property.ContainingType, symbols.MockFileData))
+		INamedTypeSymbol? containingType = propertyRef.Property.ContainingType;
+		if (containingType is null)
+		{
+			return;
+		}
+
+		// Phase 5.1: IMockFileDataAccessor enumeration properties (AllPaths,
+		// AllFiles, AllDirectories, AllDrives). These have no 1:1 Testably
+		// equivalent — manual migration only.
+		bool onMockFileSystem = SymbolEqualityComparer.Default.Equals(containingType, symbols.MockFileSystem);
+		bool onAccessor = symbols.MockFileDataAccessor is { } accessor
+		                  && SymbolEqualityComparer.Default.Equals(containingType, accessor);
+		if (onMockFileSystem || onAccessor)
+		{
+			string? enumerationPattern = ClassifyEnumerationProperty(propertyRef.Property.Name);
+			if (enumerationPattern is not null)
+			{
+				Report(context, propertyRef.Syntax.GetLocation(), enumerationPattern);
+				return;
+			}
+		}
+
+		if (symbols.MockFileData is null
+		    || !SymbolEqualityComparer.Default.Equals(containingType, symbols.MockFileData))
 		{
 			return;
 		}
@@ -246,6 +268,15 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		"AccessControl" => Patterns.MockFileDataAccessControl,
 		"AllowedFileShare" => Patterns.MockFileDataAllowedFileShare,
 		"UnixMode" => Patterns.MockFileDataUnixMode,
+		_ => null,
+	};
+
+	private static string? ClassifyEnumerationProperty(string propertyName) => propertyName switch
+	{
+		"AllPaths" => Patterns.MockFileSystemAllPaths,
+		"AllFiles" => Patterns.MockFileSystemAllFiles,
+		"AllDirectories" => Patterns.MockFileSystemAllDirectories,
+		"AllDrives" => Patterns.MockFileSystemAllDrives,
 		_ => null,
 	};
 

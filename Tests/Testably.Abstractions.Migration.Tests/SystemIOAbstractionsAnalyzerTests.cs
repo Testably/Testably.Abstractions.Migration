@@ -143,6 +143,49 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Theory]
+	[InlineData("AllPaths")]
+	[InlineData("AllFiles")]
+	[InlineData("AllDirectories")]
+	[InlineData("AllDrives")]
+	public async Task EnumerationProperty_OnMockFileSystem_ShouldBeFlagged(string property)
+	{
+		string source = $$"""
+			using System.Collections.Generic;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public IEnumerable<string> Read(MockFileSystem fs) => {|#0:fs.{{property}}|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task EnumerationProperty_OnAccessorInterface_ShouldBeFlagged()
+	{
+		// AllFiles is declared on IMockFileDataAccessor — when the receiver is the
+		// interface type itself, the property symbol's containing type points at the
+		// interface, which the analyzer must still recognise.
+		const string source = """
+			using System.Collections.Generic;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public IEnumerable<string> Read(IMockFileDataAccessor accessor) => {|#0:accessor.AllFiles|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Theory]
 	[InlineData("TextContents")]
 	[InlineData("Contents")]
 	[InlineData("Attributes")]
