@@ -99,6 +99,39 @@ public class ManualReviewTests
 		await That(chained).IsSameAs(fs);
 	}
 
+	[Fact]
+	public async Task MockFileSystem_AddFileFromEmbeddedResource_MaterializesEmbeddedFile()
+	{
+		// TestableIO matches the resource name literally; Testably exposes only a
+		// bulk InitializeEmbeddedResourcesFromAssembly with no single-file overload.
+		// Manual review: pattern id `MockFileSystem.AddFileFromEmbeddedResource`.
+		MockFileSystem fs = new();
+		fs.AddFileFromEmbeddedResource(
+			"/data/sample.txt",
+			typeof(ManualReviewTests).Assembly,
+			"Testably.Abstractions.Migration.SystemIOAbstractionsPlayground.TestData.sample.txt");
+
+		await That(fs.File.ReadAllText("/data/sample.txt").Trim())
+			.IsEqualTo("embedded-resource-content");
+	}
+
+	[Fact]
+	public async Task MockFileSystem_AddFilesFromEmbeddedNamespace_MaterializesMatchingFiles()
+	{
+		// TestableIO uses a literal StartsWith on the assembly-qualified resource name,
+		// dropping the matched prefix + one separator dot to derive each filename.
+		// The Phase 5.2 code-fix rewrites this to Testably's
+		// InitializeEmbeddedResourcesFromAssembly when the assembly resolves statically.
+		MockFileSystem fs = new();
+		fs.AddFilesFromEmbeddedNamespace(
+			"/data",
+			typeof(ManualReviewTests).Assembly,
+			"Testably.Abstractions.Migration.SystemIOAbstractionsPlayground.TestData");
+
+		await That(fs.File.ReadAllText("/data/sample.txt").Trim())
+			.IsEqualTo("embedded-resource-content");
+	}
+
 	private sealed class MyMockFs : MockFileSystem
 	{
 	}

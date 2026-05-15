@@ -315,6 +315,8 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		"FileExists" => Patterns.AccessorFileExists,
 		"AddDrive" => Patterns.MockFileSystemAddDrive,
 		"MockTime" => Patterns.MockFileSystemMockTime,
+		"AddFileFromEmbeddedResource" => Patterns.MockFileSystemAddFileFromEmbeddedResource,
+		"AddFilesFromEmbeddedNamespace" => Patterns.MockFileSystemAddFilesFromEmbeddedNamespace,
 		_ => null,
 	};
 

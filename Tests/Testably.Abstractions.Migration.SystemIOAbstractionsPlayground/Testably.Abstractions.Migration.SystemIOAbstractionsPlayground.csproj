@@ -21,4 +21,8 @@
 		<PackageReference Include="System.IO.Abstractions"/>
 		<PackageReference Include="System.IO.Abstractions.TestingHelpers"/>
 	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="TestData\sample.txt"/>
+	</ItemGroup>
 </Project>

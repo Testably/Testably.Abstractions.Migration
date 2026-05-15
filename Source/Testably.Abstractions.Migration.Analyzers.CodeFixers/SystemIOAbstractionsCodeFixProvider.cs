@@ -93,6 +93,10 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 					await TryRegisterAddDriveFixAsync(context, diagnostic, node)
 						.ConfigureAwait(false);
 					break;
+				case Patterns.MockFileSystemAddFilesFromEmbeddedNamespace:
+					await TryRegisterAddFilesFromEmbeddedNamespaceFixAsync(context, diagnostic, node)
+						.ConfigureAwait(false);
+					break;
 			}
 		}
 	}
@@ -1500,7 +1504,221 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		_ => null,
 	};
 
+	// ── Pattern: MockFileSystem.AddFilesFromEmbeddedNamespace ────────────────
+
+	private static async Task TryRegisterAddFilesFromEmbeddedNamespaceFixAsync(
+		CodeFixContext context, Diagnostic diagnostic, SyntaxNode node)
+	{
+		InvocationExpressionSyntax? invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
+		    || invocation.ArgumentList.Arguments.Count != 3)
+		{
+			return;
+		}
+
+		// The Testably target (`fileSystem.InitializeEmbeddedResourcesFromAssembly(...)`)
+		// is an extension method on `IFileSystem`. We therefore only need the receiver to
+		// resolve to *something* that implements `IFileSystem` — concrete TestableIO
+		// `MockFileSystem` does. Calling through the `IMockFileDataAccessor` interface
+		// would not work because the interface does not extend `IFileSystem`.
+		SemanticModel? semanticModel = await context.Document
+			.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+		if (semanticModel is null
+		    || !IsConcreteMockFileSystemReceiver(memberAccess.Expression, semanticModel))
+		{
+			return;
+		}
+
+		if (!TryComputeRelativePathFromAssemblyAndLiteral(
+			    invocation.ArgumentList.Arguments[1],
+			    invocation.ArgumentList.Arguments[2],
+			    semanticModel,
+			    context.CancellationToken,
+			    out _))
+		{
+			return;
+		}
+
+		context.RegisterCodeFix(
+			CodeAction.Create(
+				Resources.TestablyM001CodeFixTitle,
+				ct => ApplyAddFilesFromEmbeddedNamespaceRewriteAsync(context.Document, diagnostic, ct),
+				equivalenceKey: Patterns.MockFileSystemAddFilesFromEmbeddedNamespace),
+			diagnostic);
+	}
+
+	private static async Task<Document> ApplyAddFilesFromEmbeddedNamespaceRewriteAsync(
+		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (root is not CompilationUnitSyntax compilationUnit)
+		{
+			return document;
+		}
+
+		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+		if (semanticModel is null)
+		{
+			return document;
+		}
+
+		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
+		    || invocation.ArgumentList.Arguments.Count != 3)
+		{
+			return document;
+		}
+
+		ArgumentSyntax pathArg = invocation.ArgumentList.Arguments[0];
+		ArgumentSyntax assemblyArg = invocation.ArgumentList.Arguments[1];
+		if (!TryComputeRelativePathFromAssemblyAndLiteral(
+			    assemblyArg,
+			    invocation.ArgumentList.Arguments[2],
+			    semanticModel,
+			    cancellationToken,
+			    out string? relativePath))
+		{
+			return document;
+		}
+
+		MemberAccessExpressionSyntax newAccess = SyntaxFactory.MemberAccessExpression(
+			SyntaxKind.SimpleMemberAccessExpression,
+			memberAccess.Expression,
+			SyntaxFactory.IdentifierName("InitializeEmbeddedResourcesFromAssembly"));
+
+		// Strip NameColon on positional arguments. TestableIO uses `path` / `resourceAssembly`
+		// while Testably uses `directoryPath` / `assembly` — keeping the labels would not bind.
+		ArgumentSyntax newPath = pathArg.WithNameColon(null).WithoutTrivia();
+		ArgumentSyntax newAssembly = assemblyArg.WithNameColon(null).WithoutTrivia();
+
+		SeparatedSyntaxList<ArgumentSyntax> args = SyntaxFactory.SeparatedList(
+			new[] { newPath, newAssembly, });
+		if (relativePath is not null)
+		{
+			args = args.Add(
+				SyntaxFactory.Argument(
+					SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("relativePath")),
+					refKindKeyword: default,
+					expression: SyntaxFactory.LiteralExpression(
+						SyntaxKind.StringLiteralExpression,
+						SyntaxFactory.Literal(relativePath))));
+		}
+
+		InvocationExpressionSyntax replacement = SyntaxFactory.InvocationExpression(
+			newAccess, SyntaxFactory.ArgumentList(args));
+
+		compilationUnit = compilationUnit.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
+		compilationUnit = EnsureTestablyUsing(compilationUnit);
+		return document.WithSyntaxRoot(compilationUnit);
+	}
+
+	private static bool TryComputeRelativePathFromAssemblyAndLiteral(
+		ArgumentSyntax assemblyArg,
+		ArgumentSyntax embeddedResourcePathArg,
+		SemanticModel semanticModel,
+		CancellationToken cancellationToken,
+		out string? relativePath)
+	{
+		relativePath = null;
+
+		if (embeddedResourcePathArg.Expression is not LiteralExpressionSyntax literal
+		    || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+		{
+			return false;
+		}
+
+		string? assemblyName = TryResolveAssemblyName(assemblyArg.Expression, semanticModel, cancellationToken);
+		if (assemblyName is null)
+		{
+			return false;
+		}
+
+		string literalValue = literal.Token.ValueText;
+		string prefix = assemblyName + ".";
+
+		// Empty remainder = "literal is exactly the assembly name (with or without trailing
+		// dot)". Both correspond to "no relativePath filter" in Testably; emit no
+		// relativePath argument so the call materializes every embedded resource (matching
+		// TestableIO's `StartsWith(<asm-name>)` behavior).
+		if (literalValue == assemblyName || literalValue == prefix)
+		{
+			relativePath = null;
+			return true;
+		}
+
+		if (!literalValue.StartsWith(prefix, System.StringComparison.Ordinal))
+		{
+			return false;
+		}
+
+		string remainder = literalValue.Substring(prefix.Length);
+		if (remainder.Length == 0)
+		{
+			relativePath = null;
+			return true;
+		}
+
+		// Forward slash works cross-platform: Testably normalizes
+		// AltDirectorySeparatorChar to DirectorySeparatorChar before matching.
+		relativePath = remainder.Replace('.', '/');
+		return true;
+	}
+
+	private static string? TryResolveAssemblyName(
+		ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken)
+	{
+		// Shape 1: `typeof(SomeType).Assembly`. Resolve the type via the semantic model
+		// and read the containing assembly's name.
+		if (expression is MemberAccessExpressionSyntax
+		    {
+			    Name.Identifier.Text: "Assembly",
+			    Expression: TypeOfExpressionSyntax typeOf,
+		    })
+		{
+			TypeInfo info = semanticModel.GetTypeInfo(typeOf.Type, cancellationToken);
+			ITypeSymbol? typeSymbol = info.Type;
+			IAssemblySymbol? assembly = typeSymbol?.ContainingAssembly;
+			return assembly?.Name;
+		}
+
+		// Shape 2: `Assembly.GetExecutingAssembly()` (or any qualified form thereof). The
+		// executing assembly is the assembly currently being compiled — which is the
+		// SemanticModel's compilation assembly. Resolve via symbol lookup so we handle
+		// both `Assembly.GetExecutingAssembly()` and `System.Reflection.Assembly.
+		// GetExecutingAssembly()` uniformly. (`GetCallingAssembly` cannot be resolved
+		// statically — its return value depends on the caller frame at runtime.)
+		if (expression is InvocationExpressionSyntax invocation
+		    && semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol
+			    is IMethodSymbol
+			    {
+				    Name: "GetExecutingAssembly",
+				    Parameters.Length: 0,
+				    ContainingType:
+				    {
+					    Name: "Assembly",
+					    ContainingNamespace: { Name: "Reflection", ContainingNamespace.Name: "System", },
+				    },
+			    })
+		{
+			return semanticModel.Compilation.AssemblyName;
+		}
+
+		return null;
+	}
+
 	// ── Shared: using-directive swap ─────────────────────────────────────────
+
+	private static CompilationUnitSyntax EnsureTestablyUsing(CompilationUnitSyntax compilationUnit)
+	{
+		if (compilationUnit.Usings.Any(u => u.Name?.ToString() == TestablyTestingNamespace))
+		{
+			return compilationUnit;
+		}
+
+		UsingDirectiveSyntax usingDirective = BuildUsingDirective(compilationUnit, TestablyTestingNamespace);
+		return compilationUnit.AddUsings(usingDirective);
+	}
 
 	private static CompilationUnitSyntax SwapToTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
