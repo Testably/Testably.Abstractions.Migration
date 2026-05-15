@@ -176,6 +176,30 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Fact]
+		public async Task MockFileDataManualReviewProperty_PlainWrite_HasNoFix()
+		{
+			// Write-side counterpart: AllowedFileShare/AccessControl/UnixMode writes
+			// fall through with no rewrite too. The analyzer fires the dedicated
+			// manual-review pattern (not the generic MockFileDataPropertyWrite), so the
+			// existing write-fix is never offered.
+			const string source = """
+				using System.IO;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Write(MockFileSystem fs)
+						=> {|#0:fs.GetFile("/a").AllowedFileShare|} = FileShare.Read;
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
 		public async Task MockFileVersionInfoConstructor_HasNoFix()
 		{
 			// MockFileVersionInfo has no Testably equivalent. The analyzer flags every

@@ -166,6 +166,53 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Fact]
+	public async Task MockFileDataManualReviewProperty_PlainWrite_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Write(MockFileSystem fs)
+					=> {|#0:fs.GetFile("/a").AllowedFileShare|} = FileShare.Read;
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataManualReviewProperty_ObjectInitializerWrite_ShouldBeFlagged()
+	{
+		// The migratable property writes inside an object initializer are skipped to
+		// avoid double-flagging with the AddFile expansion (Phase 3.5). Manual-review
+		// properties have no AddFile expansion, so they must still be flagged here —
+		// otherwise the lossy call site would be silently invisible. The AddFile
+		// invocation also gets its own diagnostic, so two diagnostics for one user-
+		// visible site is expected.
+		const string source = """
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+				{
+					{|#0:fs.AddFile("/a", new MockFileData("hello") { {|#1:AllowedFileShare|} = FileShare.Read })|};
+				}
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1));
+	}
+
+	[Fact]
 	public async Task MockFileVersionInfoConstructor_ShouldBeFlagged()
 	{
 		const string source = """

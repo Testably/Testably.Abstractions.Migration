@@ -131,24 +131,30 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		bool isWrite = propertyRef.Parent is IAssignmentOperation assignment
 		               && assignment.Target == propertyRef;
 
-		// Skip property assignments inside an object-initializer expression. They are
-		// part of MockFileData construction and belong to the AddFile or initializer
-		// expansion rewrite in Phase 3.5. Reporting them here would double-flag a
-		// single user-visible call site.
+		// Phase 4a manual-review properties have no Testably equivalent and no other
+		// pass picks them up (there is no AddFile expansion for unsupported initializer
+		// properties), so they must be reported here — including inside object
+		// initializers — or the lossy call site would be invisible.
+		string? manualReviewPattern = ClassifyManualReviewProperty(propertyRef.Property.Name);
+		if (manualReviewPattern is not null)
+		{
+			Report(context, propertyRef.Syntax.GetLocation(), manualReviewPattern);
+			return;
+		}
+
+		// Skip migratable property assignments inside an object-initializer expression.
+		// They are part of MockFileData construction and belong to the AddFile or
+		// initializer expansion rewrite in Phase 3.5. Reporting them here would
+		// double-flag a single user-visible call site.
 		if (isWrite
 		    && propertyRef.Parent?.Parent is IObjectOrCollectionInitializerOperation)
 		{
 			return;
 		}
 
-		// Phase 4a manual-review: properties with no Testably equivalent get their
-		// own pattern id (regardless of read/write) so the code-fix provider can
-		// distinguish them from the migratable read/write properties handled in
-		// Phase 3 and skip registering a rewrite.
-		string pattern = ClassifyManualReviewProperty(propertyRef.Property.Name)
-			?? (isWrite
-				? Patterns.MockFileDataPropertyWrite
-				: Patterns.MockFileDataPropertyRead);
+		string pattern = isWrite
+			? Patterns.MockFileDataPropertyWrite
+			: Patterns.MockFileDataPropertyRead;
 
 		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}
