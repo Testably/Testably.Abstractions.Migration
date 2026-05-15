@@ -142,6 +142,25 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
+	[Fact]
+	public async Task MockTime_ShouldBeFlagged()
+	{
+		const string source = """
+			using System;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+					=> {|#0:fs.MockTime(() => DateTime.UnixEpoch)|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
 	[Theory]
 	[InlineData("AllPaths")]
 	[InlineData("AllFiles")]

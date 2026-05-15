@@ -314,6 +314,7 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		"MoveDirectory" => Patterns.AccessorMoveDirectory,
 		"FileExists" => Patterns.AccessorFileExists,
 		"AddDrive" => Patterns.MockFileSystemAddDrive,
+		"MockTime" => Patterns.MockFileSystemMockTime,
 		_ => null,
 	};
 

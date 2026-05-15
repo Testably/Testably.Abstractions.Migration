@@ -705,5 +705,38 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Theory]
+		[InlineData("() => System.DateTime.UnixEpoch")]
+		[InlineData("() => System.DateTime.Now")]
+		[InlineData("() => System.DateTime.UtcNow")]
+		[InlineData("dateTimeProvider")]
+		public async Task MockTime_HasNoFix(string argument)
+		{
+			// Phase 5.3 ships MockTime as manual review only. TestableIO calls the
+			// supplied delegate every time it needs a timestamp; Testably installs a
+			// fixed-then-mutable MockTimeSystem at construction. The two have no
+			// observably-equivalent automatic rewrite for arbitrary delegates, and the
+			// equivalent surface (`o => o.UseTimeSystem(...)`) lives inside the
+			// MockFileSystemOptions lambda — a cross-statement fold that conflicts
+			// with the parameterless / options-ctor fixes when both touch the same
+			// construction. A future sub-phase may opt-in fix the narrow constant-
+			// DateTime lambda shape with a custom FixAllProvider.
+			string source = $$"""
+				using System;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, Func<DateTime> dateTimeProvider)
+						=> {|#0:fs.MockTime({{argument}})|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }
