@@ -130,7 +130,9 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		public async Task MockFileDataRead_CapturedReference_HasNoFix()
 		{
 			// `data` is a captured MockFileData reference, not a one-shot `GetFile(p).Prop`.
-			// Without flow analysis we cannot safely rewrite. Phase 4 will surface this case.
+			// The analyzer (Phase 4c) classifies this as MockFileDataCapturedReferenceRead
+			// so the code-fix dispatcher falls through with no rewrite — flow analysis is
+			// required to retarget safely.
 			const string source = """
 				using System.IO.Abstractions.TestingHelpers;
 

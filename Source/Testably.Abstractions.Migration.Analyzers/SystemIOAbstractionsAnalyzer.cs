@@ -217,9 +217,22 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		string pattern = isWrite
-			? Patterns.MockFileDataPropertyWrite
-			: Patterns.MockFileDataPropertyRead;
+		// Phase 4c: separate captured-reference accesses from one-shot
+		// `fs.GetFile(path).Prop` chains. The code-fix's rewrite only applies to the
+		// one-shot shape; everything else needs flow analysis to retarget safely, so
+		// give it a discriminating pattern id and let the fix dispatch fall through.
+		bool isOneShotGetFile = symbols.MockFileSystem is not null
+		                        && propertyRef.Instance is IInvocationOperation invocation
+		                        && invocation.TargetMethod.Name == "GetFile"
+		                        && SymbolEqualityComparer.Default.Equals(
+			                        invocation.TargetMethod.ContainingType, symbols.MockFileSystem)
+		                        && invocation.TargetMethod.Parameters.Length == 1
+		                        && invocation.TargetMethod.Parameters[0].Type.SpecialType == SpecialType.System_String
+		                        && invocation.Arguments.Length == 1;
+
+		string pattern = isOneShotGetFile
+			? (isWrite ? Patterns.MockFileDataPropertyWrite : Patterns.MockFileDataPropertyRead)
+			: (isWrite ? Patterns.MockFileDataCapturedReferenceWrite : Patterns.MockFileDataCapturedReferenceRead);
 
 		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}

@@ -89,4 +89,19 @@ public static class Patterns
 
 	/// <summary><c>new MockFileData(MockFileData template)</c> — clone semantics differ; no Testably equivalent.</summary>
 	public const string MockFileDataCopyConstructor = "MockFileData.copyCtor";
+
+	/// <summary>
+	///     A read access to a <c>MockFileData</c> property whose receiver is a captured
+	///     reference (local, parameter, field, etc.) rather than a one-shot
+	///     <c>fs.GetFile(path)</c> invocation — no safe textual rewrite without flow
+	///     analysis.
+	/// </summary>
+	public const string MockFileDataCapturedReferenceRead = "MockFileData.capturedReferenceRead";
+
+	/// <summary>
+	///     A write/assignment to a <c>MockFileData</c> property whose receiver is a
+	///     captured reference rather than a one-shot <c>fs.GetFile(path)</c> invocation
+	///     — no safe textual rewrite without flow analysis.
+	/// </summary>
+	public const string MockFileDataCapturedReferenceWrite = "MockFileData.capturedReferenceWrite";
 }
