@@ -124,6 +124,47 @@ public class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
+	[Theory]
+	[InlineData("TextContents")]
+	[InlineData("Contents")]
+	[InlineData("Attributes")]
+	[InlineData("LastWriteTime")]
+	[InlineData("AllowedFileShare")]
+	public async Task MockFileDataPropertyRead_ShouldBeFlagged(string property)
+	{
+		string source = $$"""
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public object Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").{{property}}|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataPropertyWrite_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Write(MockFileSystem fs)
+					=> {|#0:fs.GetFile("/a").Attributes|} = FileAttributes.ReadOnly;
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
 	[Fact]
 	public async Task WithoutTestingHelpersAssembly_ShouldDoNothing()
 	{

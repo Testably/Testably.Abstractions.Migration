@@ -4,6 +4,7 @@
 // is suppressed here to keep static-analysis dashboards quiet.
 #pragma warning disable TestablyAbstractionsMigration001
 
+using System.IO;
 using System.Text;
 using System.IO.Abstractions.TestingHelpers;
 
@@ -71,5 +72,29 @@ public class MockFileSystemSamples
 		fs.MoveDirectory("/a", "/b");
 		fs.RemoveFile("/b/text.txt");
 		return fs.FileExists("/b/bytes.bin");
+	}
+
+	// Phase 3: MockFileData property reads against a one-shot GetFile(path).Prop chain.
+	public static (string text, byte[] bytes, FileAttributes attrs, DateTimeOffset mtime) PropertyReads(
+		MockFileSystem fs)
+	{
+		string text = fs.GetFile("/a").TextContents;
+		byte[] bytes = fs.GetFile("/a").Contents;
+		FileAttributes attrs = fs.GetFile("/a").Attributes;
+		DateTimeOffset mtime = fs.GetFile("/a").LastWriteTime;
+		return (text, bytes, attrs, mtime);
+	}
+
+	// Phase 3: MockFileData property writes against a one-shot GetFile(path).Prop = value.
+	public static void PropertyWrites(MockFileSystem fs)
+	{
+		fs.GetFile("/a").TextContents = "hello";
+		fs.GetFile("/a").Attributes = FileAttributes.ReadOnly;
+	}
+
+	// Phase 3.5: AddFile with object-initializer Attributes — expanded to AddFile + SetAttributes.
+	public static void AddFileWithAttributes(MockFileSystem fs)
+	{
+		fs.AddFile("/a", new MockFileData("hello") { Attributes = FileAttributes.ReadOnly, });
 	}
 }

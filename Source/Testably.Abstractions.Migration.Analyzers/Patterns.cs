@@ -50,4 +50,12 @@ public static class Patterns
 
 	/// <summary><c>accessor.FileExists(path)</c>.</summary>
 	public const string AccessorFileExists = "accessor.FileExists";
+
+	// ── MockFileData property access ──────────────────────────────────────
+
+	/// <summary>A read access to a <c>MockFileData</c> property.</summary>
+	public const string MockFileDataPropertyRead = "MockFileData.propertyRead";
+
+	/// <summary>A write/assignment to a <c>MockFileData</c> property.</summary>
+	public const string MockFileDataPropertyWrite = "MockFileData.propertyWrite";
 }

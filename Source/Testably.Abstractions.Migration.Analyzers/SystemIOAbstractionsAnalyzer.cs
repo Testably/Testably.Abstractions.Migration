@@ -40,6 +40,10 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			start.RegisterOperationAction(
 				ctx => AnalyzeInvocation(ctx, symbols),
 				OperationKind.Invocation);
+
+			start.RegisterOperationAction(
+				ctx => AnalyzePropertyReference(ctx, symbols),
+				OperationKind.PropertyReference);
 		});
 	}
 
@@ -93,6 +97,42 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		{
 			Report(context, invocation.Syntax.GetLocation(), pattern);
 		}
+	}
+
+	private static void AnalyzePropertyReference(OperationAnalysisContext context, TestableIoSymbols symbols)
+	{
+		if (symbols.MockFileData is null
+		    || context.Operation is not IPropertyReferenceOperation propertyRef)
+		{
+			return;
+		}
+
+		if (!SymbolEqualityComparer.Default.Equals(propertyRef.Property.ContainingType, symbols.MockFileData))
+		{
+			return;
+		}
+
+		// Distinguish reads from writes via the parent operation: only the LHS of an
+		// assignment counts as a write; compound shapes (return values, args, etc.) are
+		// reads from this operation's perspective.
+		bool isWrite = propertyRef.Parent is IAssignmentOperation assignment
+		               && assignment.Target == propertyRef;
+
+		// Skip property assignments inside an object-initializer expression. They are
+		// part of MockFileData construction and belong to the AddFile or initializer
+		// expansion rewrite in Phase 3.5. Reporting them here would double-flag a
+		// single user-visible call site.
+		if (isWrite
+		    && propertyRef.Parent?.Parent is IObjectOrCollectionInitializerOperation)
+		{
+			return;
+		}
+
+		string pattern = isWrite
+			? Patterns.MockFileDataPropertyWrite
+			: Patterns.MockFileDataPropertyRead;
+
+		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}
 
 	private static string? ClassifyMockFileSystemConstructor(IMethodSymbol constructor)
