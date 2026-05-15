@@ -840,9 +840,19 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		string variableName = localDecl.Declaration.Variables[0].Identifier.Text;
 		(string indentation, string newline) = DetectIndentationAndNewline(localDecl);
-		List<StatementSyntax> followUps = entries
-			.SelectMany(entry => BuildFollowUpStatements(variableName, entry, indentation, newline))
-			.ToList();
+		HashSet<string> emittedParents = new(System.StringComparer.Ordinal);
+		List<StatementSyntax> followUps = [];
+		foreach (DictionaryEntryShape entry in entries)
+		{
+			StatementSyntax? parentStatement = TryBuildParentDirectoryStatement(
+				variableName, entry, emittedParents, indentation, newline);
+			if (parentStatement is not null)
+			{
+				followUps.Add(parentStatement);
+			}
+
+			followUps.AddRange(BuildFollowUpStatements(variableName, entry, indentation, newline));
+		}
 
 		SyntaxList<StatementSyntax> updatedStatements = block!.Statements;
 		int index = updatedStatements.IndexOf(localDecl);
@@ -942,6 +952,76 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		return result;
 	}
+
+	private static StatementSyntax? TryBuildParentDirectoryStatement(
+		string receiverName,
+		DictionaryEntryShape entry,
+		HashSet<string> emittedParents,
+		string indentation,
+		string newline)
+	{
+		// Only literal string keys can be resolved at fix time. Non-literal keys
+		// (e.g. variables, interpolations) would require a runtime helper — the
+		// caller is left to add a CreateDirectory manually for those, as the
+		// original code worked.
+		if (entry.Key is not LiteralExpressionSyntax literal
+		    || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+		{
+			return null;
+		}
+
+		string? parent = TryGetParentDirectory(literal.Token.ValueText);
+		if (parent is null || !emittedParents.Add(parent))
+		{
+			return null;
+		}
+
+		string parentLiteralText = SymbolDisplay.FormatLiteral(parent, quote: true);
+		return SyntaxFactory.ParseStatement(
+			$"{indentation}{receiverName}.Directory.CreateDirectory({parentLiteralText});{newline}");
+	}
+
+	private static string? TryGetParentDirectory(string path)
+	{
+		int lastSep = -1;
+		for (int i = path.Length - 1; i >= 0; i--)
+		{
+			if (path[i] == '/' || path[i] == '\\')
+			{
+				lastSep = i;
+				break;
+			}
+		}
+
+		if (lastSep < 0)
+		{
+			return null;
+		}
+
+		// Collapse trailing duplicate separators ("/foo//file" → parent "/foo").
+		while (lastSep > 0 && (path[lastSep - 1] == '/' || path[lastSep - 1] == '\\'))
+		{
+			lastSep--;
+		}
+
+		string parent = path.Substring(0, lastSep);
+		if (parent.Length == 0)
+		{
+			// Posix-style root ("/file.txt") — root always exists, nothing to create.
+			return null;
+		}
+
+		// Windows drive root ("C:" or "C:\" already collapsed to "C:") — skip.
+		if (parent.Length == 2 && parent[1] == ':' && IsAsciiLetter(parent[0]))
+		{
+			return null;
+		}
+
+		return parent;
+	}
+
+	private static bool IsAsciiLetter(char c)
+		=> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 
 	private static IEnumerable<StatementSyntax> BuildFollowUpStatements(
 		string receiverName, DictionaryEntryShape entry, string indentation, string newline)

@@ -77,9 +77,9 @@ public class SystemIOAbstractionsMigrationExamples
 			new(o => o.UseCurrentDirectory("/sandbox"));
 
 		// Files + Options expansion: options lambda + per-entry write/attribute follow-ups.
-		// Note: the dictionary constructor auto-created parent directories; the code fix
-		// emits write calls only, so any parent directory must be created explicitly
-		// after migration.
+		// The dictionary constructor auto-created parent directories; the code fix
+		// preserves that by emitting one CreateDirectory per unique non-root parent
+		// before the write calls.
 		Testably.Abstractions.Testing.MockFileSystem seeded =
 			new(o => o.UseCurrentDirectory("/work"));
 		seeded.Directory.CreateDirectory("/work");
@@ -88,6 +88,7 @@ public class SystemIOAbstractionsMigrationExamples
 		seeded.File.WriteAllText("/work/readonly.txt", "readonly");
 		seeded.File.SetAttributes("/work/readonly.txt", FileAttributes.ReadOnly);
 
+		
 		// Accessor methods migrated onto the IFileSystem surface.
 		fs.Directory.CreateDirectory("/foo");
 		fs.File.Create("/foo/empty.txt").Dispose();
