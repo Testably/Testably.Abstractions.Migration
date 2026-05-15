@@ -43,6 +43,7 @@ public class ConstructorTests
 		await That(fs.Directory.GetCurrentDirectory()).IsEqualTo("/work");
 		await That(fs.File.ReadAllText("/etc/hosts")).IsEqualTo("127.0.0.1 localhost");
 		await That(fs.File.ReadAllBytes("/etc/binary")).IsEqualTo(new byte[] { 0x01, 0x02 });
+		await That(fs.File.ReadAllText("/etc/utf8", Encoding.UTF8)).IsEqualTo("encoded");
 	}
 
 	[Fact]
