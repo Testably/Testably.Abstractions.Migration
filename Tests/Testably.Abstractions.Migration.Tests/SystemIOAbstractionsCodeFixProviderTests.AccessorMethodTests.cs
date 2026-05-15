@@ -738,5 +738,256 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Fact]
+		public async Task AddFileFromEmbeddedResource_HasNoFix()
+		{
+			// Testably exposes only a bulk InitializeEmbeddedResourcesFromAssembly with no
+			// single-file overload, and uses path-style matching against the auto-stripped
+			// resource name rather than TestableIO's literal dot-prefix StartsWith. A naive
+			// rewrite would compile but materialize a different resource set, so the call
+			// site is reported for manual migration.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+				using System.Reflection;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, Assembly asm)
+						=> {|#0:fs.AddFileFromEmbeddedResource("/data/foo.json", asm, "MyAssembly.TestData.foo.json")|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_NonResolvableAssembly_HasNoFix()
+		{
+			// When the assembly arg is an opaque parameter, the analyzer cannot identify
+			// which prefix to strip from the literal — fix dispatcher falls through to
+			// manual review.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+				using System.Reflection;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, Assembly asm)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", asm, "MyAssembly.TestData")|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_TypeOfAssembly_RewritesToInitializeEmbeddedResources()
+		{
+			// When the assembly arg is `typeof(X).Assembly` and the literal starts with
+			// the resolved assembly name, strip the prefix and emit `relativePath:`.
+			// Defaults aside, the rewrite uses Testably's
+			// `InitializeEmbeddedResourcesFromAssembly` extension, so a `using
+			// Testably.Abstractions.Testing;` is added without disturbing the existing
+			// TestingHelpers using (the receiver type stays bound to TestableIO so
+			// other call sites in the file keep compiling).
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "TestProject.TestData")|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions.TestingHelpers;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.InitializeEmbeddedResourcesFromAssembly("/data", typeof(C).Assembly, relativePath: "TestData");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_NestedNamespace_PreservesPath()
+		{
+			// Multi-segment relative path: dots are converted to forward slashes so
+			// Testably's path-style `relativePath` matcher consumes them correctly.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "TestProject.TestData.Sub.Inner")|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions.TestingHelpers;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.InitializeEmbeddedResourcesFromAssembly("/data", typeof(C).Assembly, relativePath: "TestData/Sub/Inner");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_LiteralEqualsAssemblyName_OmitsRelativePath()
+		{
+			// Literal == assembly name (or assembly-name + ".") means "all resources" in
+			// TestableIO. Equivalent in Testably is calling without `relativePath`, so the
+			// rewrite drops that argument entirely.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "TestProject")|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions.TestingHelpers;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.InitializeEmbeddedResourcesFromAssembly("/data", typeof(C).Assembly);
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_GetExecutingAssembly_RewritesToInitializeEmbeddedResources()
+		{
+			// `Assembly.GetExecutingAssembly()` resolves to the compilation's own
+			// assembly. The analyzer reads `Compilation.AssemblyName` and strips the
+			// prefix the same way it does for `typeof(X).Assembly`.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+				using System.Reflection;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", Assembly.GetExecutingAssembly(), "TestProject.TestData")|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions.TestingHelpers;
+				using System.Reflection;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.InitializeEmbeddedResourcesFromAssembly("/data", Assembly.GetExecutingAssembly(), relativePath: "TestData");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_LiteralPrefixMismatch_HasNoFix()
+		{
+			// Literal does not start with the resolved assembly name. The user might be
+			// reaching into a different assembly's resource graph; without static
+			// confirmation that the prefix is correct, the analyzer cannot strip safely.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "OtherAssembly.TestData")|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_NonLiteralPath_HasNoFix()
+		{
+			// The third argument is not a string literal — could be a const reference,
+			// concatenation, or any expression. The analyzer can't strip a prefix it
+			// can't read, so manual review.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, string ns)
+						=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, ns)|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task AddFilesFromEmbeddedNamespace_InterfaceTypedReceiver_HasNoFix()
+		{
+			// The Testably target is an extension method on `IFileSystem`. The TestableIO
+			// `IMockFileDataAccessor` interface does NOT implement `IFileSystem`, so the
+			// rewritten call would not bind. Fall through to manual review.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(IMockFileDataAccessor accessor)
+						=> {|#0:accessor.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "TestProject.TestData")|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

@@ -70,6 +70,30 @@ public static class Patterns
 	/// </summary>
 	public const string MockFileSystemMockTime = "MockFileSystem.MockTime";
 
+	/// <summary>
+	///     <c>fs.AddFileFromEmbeddedResource(path, assembly, embeddedResourcePath)</c>.
+	///     Manual review (Phase 5.2): Testably exposes only a bulk
+	///     <c>InitializeEmbeddedResourcesFromAssembly(directoryPath, assembly,
+	///     relativePath, searchPattern, searchOption)</c> with no single-file overload,
+	///     and uses a path-style match (auto-strips the assembly-name prefix and
+	///     replaces dots with directory separators) instead of TestableIO's literal
+	///     dot-prefix match. A naive textual rewrite would compile but materialize a
+	///     different resource set, so the call site is reported for manual migration.
+	/// </summary>
+	public const string MockFileSystemAddFileFromEmbeddedResource =
+		"MockFileSystem.AddFileFromEmbeddedResource";
+
+	/// <summary>
+	///     <c>fs.AddFilesFromEmbeddedNamespace(path, assembly, embeddedResourcePath)</c>.
+	///     Phase 5.2: when the assembly arg resolves statically (<c>typeof(X).Assembly</c>
+	///     or <c>Assembly.GetExecutingAssembly()</c>) and the third arg is a string
+	///     literal that starts with the resolved assembly name, the code-fix rewrites to
+	///     Testably's <c>InitializeEmbeddedResourcesFromAssembly</c>. Otherwise the call
+	///     site is left for manual review.
+	/// </summary>
+	public const string MockFileSystemAddFilesFromEmbeddedNamespace =
+		"MockFileSystem.AddFilesFromEmbeddedNamespace";
+
 	// ── Enumeration properties (Phase 5.1) ────────────────────────────────
 	// These IMockFileDataAccessor properties enumerate the whole mocked file
 	// system. Testably has no direct equivalent — the natural replacements

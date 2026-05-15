@@ -161,6 +161,44 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
+	[Fact]
+	public async Task AddFileFromEmbeddedResource_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+			using System.Reflection;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs, Assembly asm)
+					=> {|#0:fs.AddFileFromEmbeddedResource("/data/foo.json", asm, "MyAssembly.TestData.foo.json")|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task AddFilesFromEmbeddedNamespace_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+			using System.Reflection;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs, Assembly asm)
+					=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", asm, "MyAssembly.TestData")|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
 	[Theory]
 	[InlineData("AllPaths")]
 	[InlineData("AllFiles")]
