@@ -58,4 +58,22 @@ public static class Patterns
 
 	/// <summary>A write/assignment to a <c>MockFileData</c> property.</summary>
 	public const string MockFileDataPropertyWrite = "MockFileData.propertyWrite";
+
+	// ── Manual-review patterns (Phase 4a) ─────────────────────────────────
+	// These call sites have no automatic rewrite because Testably.Abstractions
+	// has no equivalent surface for the captured concept. The analyzer flags
+	// them with a discriminating pattern id so the user can locate and address
+	// each manually; the code-fix provider intentionally registers no fix.
+
+	/// <summary><c>MockFileData.AccessControl</c> — Windows-only FileSecurity has no Testably equivalent.</summary>
+	public const string MockFileDataAccessControl = "MockFileData.AccessControl";
+
+	/// <summary><c>MockFileData.AllowedFileShare</c> — file-share locking has no Testably equivalent.</summary>
+	public const string MockFileDataAllowedFileShare = "MockFileData.AllowedFileShare";
+
+	/// <summary><c>MockFileData.UnixMode</c> — Unix file permissions have no Testably equivalent.</summary>
+	public const string MockFileDataUnixMode = "MockFileData.UnixMode";
+
+	/// <summary><c>new MockFileVersionInfo(...)</c> — file version metadata has no Testably equivalent.</summary>
+	public const string MockFileVersionInfoConstructor = "MockFileVersionInfo.ctor";
 }

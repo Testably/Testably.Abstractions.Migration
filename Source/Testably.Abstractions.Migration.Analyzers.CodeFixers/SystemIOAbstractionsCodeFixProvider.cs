@@ -54,6 +54,11 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				continue;
 			}
 
+			// Patterns not listed below are manual-review (Phase 4): the analyzer
+			// surfaces them with a discriminating id but the provider intentionally
+			// registers no rewrite because Testably.Abstractions has no equivalent
+			// surface. Registering a no-op fix would fail the test verifier with
+			// "No code fixes were expected" — silent fall-through is required.
 			switch (pattern)
 			{
 				case Patterns.MockFileSystemDefaultConstructor:

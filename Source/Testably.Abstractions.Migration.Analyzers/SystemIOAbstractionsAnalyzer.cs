@@ -55,16 +55,29 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		}
 
 		IMethodSymbol? constructor = creation.Constructor;
-		if (constructor is null
-		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, symbols.MockFileSystem))
+		if (constructor is null)
 		{
 			return;
 		}
 
-		string? pattern = ClassifyMockFileSystemConstructor(constructor);
-		if (pattern is not null)
+		if (SymbolEqualityComparer.Default.Equals(constructor.ContainingType, symbols.MockFileSystem))
 		{
-			Report(context, creation.Syntax.GetLocation(), pattern);
+			string? pattern = ClassifyMockFileSystemConstructor(constructor);
+			if (pattern is not null)
+			{
+				Report(context, creation.Syntax.GetLocation(), pattern);
+			}
+
+			return;
+		}
+
+		// Phase 4a manual-review: MockFileVersionInfo has no Testably equivalent.
+		// Flag the construction site so the user can locate every fixture that seeded
+		// version metadata; the code-fix provider intentionally registers no rewrite.
+		if (symbols.MockFileVersionInfo is { } mockFileVersionInfo
+		    && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, mockFileVersionInfo))
+		{
+			Report(context, creation.Syntax.GetLocation(), Patterns.MockFileVersionInfoConstructor);
 		}
 	}
 
@@ -118,10 +131,21 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		bool isWrite = propertyRef.Parent is IAssignmentOperation assignment
 		               && assignment.Target == propertyRef;
 
-		// Skip property assignments inside an object-initializer expression. They are
-		// part of MockFileData construction and belong to the AddFile or initializer
-		// expansion rewrite in Phase 3.5. Reporting them here would double-flag a
-		// single user-visible call site.
+		// Phase 4a manual-review properties have no Testably equivalent and no other
+		// pass picks them up (there is no AddFile expansion for unsupported initializer
+		// properties), so they must be reported here — including inside object
+		// initializers — or the lossy call site would be invisible.
+		string? manualReviewPattern = ClassifyManualReviewProperty(propertyRef.Property.Name);
+		if (manualReviewPattern is not null)
+		{
+			Report(context, propertyRef.Syntax.GetLocation(), manualReviewPattern);
+			return;
+		}
+
+		// Skip migratable property assignments inside an object-initializer expression.
+		// They are part of MockFileData construction and belong to the AddFile or
+		// initializer expansion rewrite in Phase 3.5. Reporting them here would
+		// double-flag a single user-visible call site.
 		if (isWrite
 		    && propertyRef.Parent?.Parent is IObjectOrCollectionInitializerOperation)
 		{
@@ -134,6 +158,14 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 
 		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}
+
+	private static string? ClassifyManualReviewProperty(string propertyName) => propertyName switch
+	{
+		"AccessControl" => Patterns.MockFileDataAccessControl,
+		"AllowedFileShare" => Patterns.MockFileDataAllowedFileShare,
+		"UnixMode" => Patterns.MockFileDataUnixMode,
+		_ => null,
+	};
 
 	private static string? ClassifyMockFileSystemConstructor(IMethodSymbol constructor)
 	{

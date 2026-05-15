@@ -16,12 +16,14 @@ internal sealed class TestableIoSymbols
 		INamedTypeSymbol mockFileSystem,
 		INamedTypeSymbol? mockFileData,
 		INamedTypeSymbol? mockDriveData,
-		INamedTypeSymbol? mockFileDataAccessor)
+		INamedTypeSymbol? mockFileDataAccessor,
+		INamedTypeSymbol? mockFileVersionInfo)
 	{
 		MockFileSystem = mockFileSystem;
 		MockFileData = mockFileData;
 		MockDriveData = mockDriveData;
 		MockFileDataAccessor = mockFileDataAccessor;
+		MockFileVersionInfo = mockFileVersionInfo;
 	}
 
 	public INamedTypeSymbol MockFileSystem { get; }
@@ -32,6 +34,7 @@ internal sealed class TestableIoSymbols
 	public INamedTypeSymbol? MockFileData { get; }
 	public INamedTypeSymbol? MockDriveData { get; }
 	public INamedTypeSymbol? MockFileDataAccessor { get; }
+	public INamedTypeSymbol? MockFileVersionInfo { get; }
 
 	public static TestableIoSymbols? TryGetFrom(Compilation compilation)
 	{
@@ -46,6 +49,7 @@ internal sealed class TestableIoSymbols
 			mockFileSystem,
 			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockFileData"),
 			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockDriveData"),
-			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".IMockFileDataAccessor"));
+			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".IMockFileDataAccessor"),
+			compilation.GetTypeByMetadataName(TestingHelpersNamespace + ".MockFileVersionInfo"));
 	}
 }
