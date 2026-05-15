@@ -4,12 +4,15 @@ using System.IO.Abstractions.TestingHelpers;
 namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 
 /// <summary>
-///     Manual-review fixtures (Phase 4a): call sites for <see cref="MockFileData" />
-///     properties and <see cref="MockFileVersionInfo" /> construction that have no
-///     equivalent in <c>Testably.Abstractions.Testing</c>. The analyzer flags each one
-///     with a discriminating pattern id; the code-fix provider intentionally registers
-///     no rewrite, so these tests stand as the parity baseline a human can use to plan
-///     the migration manually.
+///     Manual-review fixtures (Phase 4): call sites that have no equivalent in
+///     <c>Testably.Abstractions.Testing</c>. Phase 4a covers lossy
+///     <see cref="MockFileData" /> properties (AccessControl, AllowedFileShare,
+///     UnixMode) and <see cref="MockFileVersionInfo" /> construction. Phase 4b adds
+///     user-defined subclasses of <see cref="MockFileSystem" /> and
+///     <see cref="MockFileData" /> plus the <see cref="MockFileData" /> copy
+///     constructor. The analyzer flags each one with a discriminating pattern id; the
+///     code-fix provider intentionally registers no rewrite, so these tests stand as
+///     the parity baseline a human can use to plan the migration manually.
 /// </summary>
 public class ManualReviewTests
 {
@@ -53,5 +56,40 @@ public class ManualReviewTests
 		await That(info.FileName).IsEqualTo("/a.dll");
 		await That(info.FileVersion).IsEqualTo("1.2.3");
 		await That(info.ProductName).IsEqualTo("Sample");
+	}
+
+	[Fact]
+	public async Task MockFileSystemSubclass_BehavesAsMockFileSystem()
+	{
+		MyMockFs fs = new();
+		fs.AddFile("/a", new MockFileData("hello"));
+
+		await That(fs.File.ReadAllText("/a")).IsEqualTo("hello");
+	}
+
+	[Fact]
+	public async Task MockFileDataSubclass_BehavesAsMockFileData()
+	{
+		MyMockFileData data = new();
+
+		await That(data.TextContents).IsEqualTo("hello");
+	}
+
+	[Fact]
+	public async Task MockFileData_CopyConstructor_ClonesTextContents()
+	{
+		MockFileData template = new("hello");
+		MockFileData clone = new(template);
+
+		await That(clone.TextContents).IsEqualTo("hello");
+	}
+
+	private sealed class MyMockFs : MockFileSystem
+	{
+	}
+
+	private sealed class MyMockFileData : MockFileData
+	{
+		public MyMockFileData() : base("hello") { }
 	}
 }

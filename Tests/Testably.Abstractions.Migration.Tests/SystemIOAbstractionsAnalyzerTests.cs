@@ -230,6 +230,77 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Fact]
+	public async Task MockFileSystemSubclass_ShouldBeFlaggedAtClassDeclaration()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class {|#0:MyMockFs|} : MockFileSystem
+			{
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileSystemSubclass_Transitive_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class {|#0:Intermediate|} : MockFileSystem
+			{
+			}
+
+			public class {|#1:Leaf|} : Intermediate
+			{
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1));
+	}
+
+	[Fact]
+	public async Task MockFileDataSubclass_ShouldBeFlaggedAtClassDeclaration()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class {|#0:MyData|} : MockFileData
+			{
+				public MyData() : base("hello") { }
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataCopyConstructor_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public MockFileData Clone(MockFileData template) => {|#0:new MockFileData(template)|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
 	public async Task MockFileDataPropertyWrite_ShouldBeFlagged()
 	{
 		const string source = """

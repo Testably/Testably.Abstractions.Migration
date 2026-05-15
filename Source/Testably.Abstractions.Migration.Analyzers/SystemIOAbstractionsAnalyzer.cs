@@ -44,7 +44,59 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			start.RegisterOperationAction(
 				ctx => AnalyzePropertyReference(ctx, symbols),
 				OperationKind.PropertyReference);
+
+			start.RegisterSymbolAction(
+				ctx => AnalyzeNamedTypeDeclaration(ctx, symbols),
+				SymbolKind.NamedType);
 		});
+	}
+
+	private static void AnalyzeNamedTypeDeclaration(SymbolAnalysisContext context, TestableIoSymbols symbols)
+	{
+		if (context.Symbol is not INamedTypeSymbol named || named.TypeKind != TypeKind.Class)
+		{
+			return;
+		}
+
+		// Skip the framework types themselves — only user-defined subclasses need migration.
+		if (SymbolEqualityComparer.Default.Equals(named, symbols.MockFileSystem)
+		    || (symbols.MockFileData is { } mockFileData
+		        && SymbolEqualityComparer.Default.Equals(named, mockFileData)))
+		{
+			return;
+		}
+
+		string? pattern = ClassifySubclass(named, symbols);
+		if (pattern is null)
+		{
+			return;
+		}
+
+		// Locations covers every partial declaration; reporting on each surfaces all of
+		// them to the user. The set is usually a single location.
+		foreach (Location location in named.Locations)
+		{
+			Report(context, location, pattern);
+		}
+	}
+
+	private static string? ClassifySubclass(INamedTypeSymbol named, TestableIoSymbols symbols)
+	{
+		for (INamedTypeSymbol? baseType = named.BaseType; baseType is not null; baseType = baseType.BaseType)
+		{
+			if (SymbolEqualityComparer.Default.Equals(baseType, symbols.MockFileSystem))
+			{
+				return Patterns.MockFileSystemSubclass;
+			}
+
+			if (symbols.MockFileData is { } mockFileData
+			    && SymbolEqualityComparer.Default.Equals(baseType, mockFileData))
+			{
+				return Patterns.MockFileDataSubclass;
+			}
+		}
+
+		return null;
 	}
 
 	private static void AnalyzeObjectCreation(OperationAnalysisContext context, TestableIoSymbols symbols)
@@ -78,6 +130,19 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		    && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, mockFileVersionInfo))
 		{
 			Report(context, creation.Syntax.GetLocation(), Patterns.MockFileVersionInfoConstructor);
+			return;
+		}
+
+		// Phase 4b manual-review: MockFileData copy constructor. Cloning semantics differ
+		// across libraries and Testably has no equivalent. We only fire for the explicit
+		// 1-parameter MockFileData overload — the encoding/byte/text ctors are part of
+		// existing AddFile expansion (Phases 2/3.5) and must keep their current pattern.
+		if (symbols.MockFileData is { } mockFileData
+		    && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, mockFileData)
+		    && constructor.Parameters.Length == 1
+		    && SymbolEqualityComparer.Default.Equals(constructor.Parameters[0].Type, mockFileData))
+		{
+			Report(context, creation.Syntax.GetLocation(), Patterns.MockFileDataCopyConstructor);
 		}
 	}
 
@@ -204,14 +269,20 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 	};
 
 	private static void Report(OperationAnalysisContext context, Location location, string pattern)
+		=> context.ReportDiagnostic(BuildDiagnostic(location, pattern));
+
+	private static void Report(SymbolAnalysisContext context, Location location, string pattern)
+		=> context.ReportDiagnostic(BuildDiagnostic(location, pattern));
+
+	private static Diagnostic BuildDiagnostic(Location location, string pattern)
 	{
 		ImmutableDictionary<string, string?> properties =
 			new Dictionary<string, string?> { [Patterns.Key] = pattern, }.ToImmutableDictionary();
 
-		context.ReportDiagnostic(Diagnostic.Create(
+		return Diagnostic.Create(
 			Rules.SystemIOAbstractionsRule,
 			location,
 			properties,
-			messageArgs: null));
+			messageArgs: null);
 	}
 }

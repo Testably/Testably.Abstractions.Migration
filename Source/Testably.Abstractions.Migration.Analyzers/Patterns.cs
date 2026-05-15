@@ -59,11 +59,13 @@ public static class Patterns
 	/// <summary>A write/assignment to a <c>MockFileData</c> property.</summary>
 	public const string MockFileDataPropertyWrite = "MockFileData.propertyWrite";
 
-	// ── Manual-review patterns (Phase 4a) ─────────────────────────────────
+	// ── Manual-review patterns (Phase 4) ──────────────────────────────────
 	// These call sites have no automatic rewrite because Testably.Abstractions
 	// has no equivalent surface for the captured concept. The analyzer flags
 	// them with a discriminating pattern id so the user can locate and address
 	// each manually; the code-fix provider intentionally registers no fix.
+
+	// Phase 4a: lossy MockFileData properties + MockFileVersionInfo.
 
 	/// <summary><c>MockFileData.AccessControl</c> — Windows-only FileSecurity has no Testably equivalent.</summary>
 	public const string MockFileDataAccessControl = "MockFileData.AccessControl";
@@ -76,4 +78,15 @@ public static class Patterns
 
 	/// <summary><c>new MockFileVersionInfo(...)</c> — file version metadata has no Testably equivalent.</summary>
 	public const string MockFileVersionInfoConstructor = "MockFileVersionInfo.ctor";
+
+	// Phase 4b: subclasses + MockFileData copy constructor.
+
+	/// <summary>A user-defined class derives from <c>MockFileSystem</c>; the inheritance contract differs in Testably.</summary>
+	public const string MockFileSystemSubclass = "MockFileSystem.subclass";
+
+	/// <summary>A user-defined class derives from <c>MockFileData</c>; there is no Testably equivalent.</summary>
+	public const string MockFileDataSubclass = "MockFileData.subclass";
+
+	/// <summary><c>new MockFileData(MockFileData template)</c> — clone semantics differ; no Testably equivalent.</summary>
+	public const string MockFileDataCopyConstructor = "MockFileData.copyCtor";
 }

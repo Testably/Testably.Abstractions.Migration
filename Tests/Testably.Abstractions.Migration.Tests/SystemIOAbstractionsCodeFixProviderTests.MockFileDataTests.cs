@@ -359,5 +359,47 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Fact]
+		public async Task MockFileDataSubclass_HasNoFix()
+		{
+			// A user-defined MockFileData subclass has no Testably equivalent. The analyzer
+			// flags the class declaration so the user can locate every fixture; the code-fix
+			// provider intentionally falls through with no rewrite.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class {|#0:MyData|} : MockFileData
+				{
+					public MyData() : base("hello") { }
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task MockFileDataCopyConstructor_HasNoFix()
+		{
+			// MockFileData copy ctor (`new MockFileData(template)`) clones template state.
+			// Testably has no equivalent clone semantics, so the analyzer flags the call
+			// site and the code-fix provider intentionally falls through with no rewrite.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public MockFileData Clone(MockFileData template) => {|#0:new MockFileData(template)|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }
