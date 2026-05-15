@@ -320,6 +320,85 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Fact]
+	public async Task MockFileDataCapturedReferenceRead_FromLocal_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public string Read(MockFileSystem fs)
+				{
+					MockFileData data = fs.GetFile("/a");
+					return {|#0:data.TextContents|};
+				}
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataCapturedReferenceWrite_FromLocal_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Write(MockFileSystem fs)
+				{
+					MockFileData data = fs.GetFile("/a");
+					{|#0:data.Attributes|} = FileAttributes.ReadOnly;
+				}
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataCapturedReferenceRead_FromParameter_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public string Read(MockFileData data) => {|#0:data.TextContents|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileDataCapturedReferenceRead_FromField_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				private MockFileData data = new("hello");
+
+				public string Read() => {|#0:data.TextContents|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
 	public async Task WithoutTestingHelpersAssembly_ShouldDoNothing()
 	{
 		const string source = """
