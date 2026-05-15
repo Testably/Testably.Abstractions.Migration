@@ -129,7 +129,6 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	[InlineData("Contents")]
 	[InlineData("Attributes")]
 	[InlineData("LastWriteTime")]
-	[InlineData("AllowedFileShare")]
 	public async Task MockFileDataPropertyRead_ShouldBeFlagged(string property)
 	{
 		string source = $$"""
@@ -138,6 +137,43 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			public class C
 			{
 				public object Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").{{property}}|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Theory]
+	[InlineData("AccessControl")]
+	[InlineData("AllowedFileShare")]
+	[InlineData("UnixMode")]
+	public async Task MockFileDataManualReviewProperty_ShouldBeFlagged(string property)
+	{
+		string source = $$"""
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public object Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").{{property}}|};
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
+	}
+
+	[Fact]
+	public async Task MockFileVersionInfoConstructor_ShouldBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public MockFileVersionInfo Build() => {|#0:new MockFileVersionInfo("/a.dll", "1.2.3")|};
 			}
 			""";
 

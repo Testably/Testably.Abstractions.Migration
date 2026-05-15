@@ -150,17 +150,43 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
-		public async Task MockFileDataRead_UnsupportedProperty_HasNoFix()
+		[Theory]
+		[InlineData("FileShare", "AllowedFileShare")]
+		[InlineData("System.Security.AccessControl.FileSecurity", "AccessControl")]
+		[InlineData("System.IO.UnixFileMode", "UnixMode")]
+		public async Task MockFileDataManualReviewProperty_HasNoFix(string returnType, string property)
 		{
-			// AllowedFileShare has no direct File.Get* equivalent — Phase 4 manual-review.
-			const string source = """
+			// AccessControl/AllowedFileShare/UnixMode have no Testably equivalent.
+			// The analyzer classifies each with its own pattern id (Patterns.MockFileData*)
+			// and the code-fix provider intentionally falls through with no rewrite.
+			string source = $$"""
 				using System.IO;
 				using System.IO.Abstractions.TestingHelpers;
 
 				public class C
 				{
-					public FileShare Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").AllowedFileShare|};
+					public {{returnType}} Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").{{property}}|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Fact]
+		public async Task MockFileVersionInfoConstructor_HasNoFix()
+		{
+			// MockFileVersionInfo has no Testably equivalent. The analyzer flags every
+			// `new MockFileVersionInfo(...)` construction so the user can locate every
+			// fixture; the code-fix provider intentionally falls through with no rewrite.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public MockFileVersionInfo Build() => {|#0:new MockFileVersionInfo("/a.dll", "1.2.3")|};
 				}
 				""";
 

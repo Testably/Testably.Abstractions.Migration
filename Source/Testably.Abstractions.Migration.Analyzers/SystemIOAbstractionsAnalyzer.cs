@@ -55,16 +55,29 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		}
 
 		IMethodSymbol? constructor = creation.Constructor;
-		if (constructor is null
-		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, symbols.MockFileSystem))
+		if (constructor is null)
 		{
 			return;
 		}
 
-		string? pattern = ClassifyMockFileSystemConstructor(constructor);
-		if (pattern is not null)
+		if (SymbolEqualityComparer.Default.Equals(constructor.ContainingType, symbols.MockFileSystem))
 		{
-			Report(context, creation.Syntax.GetLocation(), pattern);
+			string? pattern = ClassifyMockFileSystemConstructor(constructor);
+			if (pattern is not null)
+			{
+				Report(context, creation.Syntax.GetLocation(), pattern);
+			}
+
+			return;
+		}
+
+		// Phase 4a manual-review: MockFileVersionInfo has no Testably equivalent.
+		// Flag the construction site so the user can locate every fixture that seeded
+		// version metadata; the code-fix provider intentionally registers no rewrite.
+		if (symbols.MockFileVersionInfo is { } mockFileVersionInfo
+		    && SymbolEqualityComparer.Default.Equals(constructor.ContainingType, mockFileVersionInfo))
+		{
+			Report(context, creation.Syntax.GetLocation(), Patterns.MockFileVersionInfoConstructor);
 		}
 	}
 
@@ -128,12 +141,25 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		string pattern = isWrite
-			? Patterns.MockFileDataPropertyWrite
-			: Patterns.MockFileDataPropertyRead;
+		// Phase 4a manual-review: properties with no Testably equivalent get their
+		// own pattern id (regardless of read/write) so the code-fix provider can
+		// distinguish them from the migratable read/write properties handled in
+		// Phase 3 and skip registering a rewrite.
+		string pattern = ClassifyManualReviewProperty(propertyRef.Property.Name)
+			?? (isWrite
+				? Patterns.MockFileDataPropertyWrite
+				: Patterns.MockFileDataPropertyRead);
 
 		Report(context, propertyRef.Syntax.GetLocation(), pattern);
 	}
+
+	private static string? ClassifyManualReviewProperty(string propertyName) => propertyName switch
+	{
+		"AccessControl" => Patterns.MockFileDataAccessControl,
+		"AllowedFileShare" => Patterns.MockFileDataAllowedFileShare,
+		"UnixMode" => Patterns.MockFileDataUnixMode,
+		_ => null,
+	};
 
 	private static string? ClassifyMockFileSystemConstructor(IMethodSymbol constructor)
 	{
