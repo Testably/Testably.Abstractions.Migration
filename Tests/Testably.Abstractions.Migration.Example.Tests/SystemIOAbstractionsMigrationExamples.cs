@@ -16,7 +16,7 @@ public class SystemIOAbstractionsMigrationExamples
 	[Fact]
 	public async Task BeforeMigration()
 	{
-#pragma warning disable TestablyAbstractionsMigration001
+#pragma warning disable TestablyM001
 		// Parameterless constructor → using directive swap.
 		MockFileSystem fs = new();
 
@@ -54,7 +54,7 @@ public class SystemIOAbstractionsMigrationExamples
 		// MockFileData property writes → File.WriteAllText / File.SetAttributes calls.
 		seeded.GetFile("/work/text.txt").TextContents = "updated";
 		seeded.GetFile("/work/readonly.txt").Attributes = FileAttributes.Normal;
-#pragma warning restore TestablyAbstractionsMigration001
+#pragma warning restore TestablyM001
 
 		_ = withCurrent;
 		_ = creationTime;

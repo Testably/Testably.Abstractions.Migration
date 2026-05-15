@@ -30,6 +30,6 @@ After installing the package, every supported construct is reported as a warning
 code fix from your IDE (Visual Studio, Rider, VS Code with C# Dev Kit) or via
 `dotnet format analyzers` to rewrite the call site.
 
-| Diagnostic                       | Source library         | Code fix title                                                  |
-|----------------------------------|------------------------|-----------------------------------------------------------------|
-| `TestablyAbstractionsMigration001` | System.IO.Abstractions | *Migrate System.IO.Abstractions MockFileSystem to Testably*     |
+| Diagnostic     | Source library         | Code fix title                                              |
+|----------------|------------------------|-------------------------------------------------------------|
+| `TestablyM001` | System.IO.Abstractions | *Migrate System.IO.Abstractions MockFileSystem to Testably* |

@@ -15,7 +15,7 @@ public static class Rules
 	///     API that should be migrated to <c>Testably.Abstractions.Testing.MockFileSystem</c>.
 	/// </summary>
 	public static readonly DiagnosticDescriptor SystemIOAbstractionsRule =
-		CreateDescriptor("TestablyAbstractionsMigration001", UsageCategory, DiagnosticSeverity.Warning);
+		CreateDescriptor("TestablyM001", UsageCategory, DiagnosticSeverity.Warning);
 
 
 	private static DiagnosticDescriptor CreateDescriptor(string diagnosticId, string category,

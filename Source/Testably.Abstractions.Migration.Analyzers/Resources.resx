@@ -24,16 +24,16 @@
 			PublicKeyToken=b77a5c561934e089
 		</value>
 	</resheader>
-	<data name="TestablyAbstractionsMigration001Description" xml:space="preserve">
+	<data name="TestablyM001Description" xml:space="preserve">
 		<value>Migrate MockFileSystem usages from System.IO.Abstractions to Testably.Abstractions.</value>
 	</data>
-	<data name="TestablyAbstractionsMigration001MessageFormat" xml:space="preserve">
+	<data name="TestablyM001MessageFormat" xml:space="preserve">
 		<value>System.IO.Abstractions MockFileSystem should be migrated to Testably.Abstractions.</value>
 	</data>
-	<data name="TestablyAbstractionsMigration001Title" xml:space="preserve">
+	<data name="TestablyM001Title" xml:space="preserve">
 		<value>System.IO.Abstractions MockFileSystem should be migrated.</value>
 	</data>
-	<data name="TestablyAbstractionsMigration001CodeFixTitle" xml:space="preserve">
+	<data name="TestablyM001CodeFixTitle" xml:space="preserve">
 		<value>Migrate System.IO.Abstractions MockFileSystem to Testably.Abstractions</value>
 		<comment>The title of the code fix.</comment>
 	</data>
