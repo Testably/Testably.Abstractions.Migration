@@ -657,6 +657,142 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Fact]
+		public async Task AddDrive_LocalVariableReceiver_ShouldRewriteToWithDrive()
+		{
+			// Local-variable receiver: declarator syntax is VariableDeclaratorSyntax.
+			// The `var` type annotation parses to an unqualified IdentifierName, so the
+			// using-swap can safely retarget the inferred MockFileSystem.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem source)
+					{
+						var fs = source;
+						{|#0:fs.AddDrive("D:", new MockDriveData())|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem source)
+					{
+						var fs = source;
+						fs.WithDrive("D:");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_PropertyReceiver_ShouldRewriteToWithDrive()
+		{
+			// Property-typed receiver: declarator syntax is PropertyDeclarationSyntax.
+			// The declared type is unqualified MockFileSystem, so the using-swap retargets
+			// it correctly.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public MockFileSystem Fs { get; set; } = null!;
+					public void Run() => {|#0:Fs.AddDrive("D:", new MockDriveData())|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public MockFileSystem Fs { get; set; } = null!;
+					public void Run() => Fs.WithDrive("D:");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_MethodReturnReceiver_ShouldRewriteToWithDrive()
+		{
+			// Method-return-typed receiver: declarator syntax is MethodDeclarationSyntax.
+			// The return type is unqualified MockFileSystem, so the using-swap retargets
+			// the call site.
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public MockFileSystem GetFs() => null!;
+					public void Run() => {|#0:GetFs().AddDrive("D:", new MockDriveData())|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public MockFileSystem GetFs() => null!;
+					public void Run() => GetFs().WithDrive("D:");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
+		public async Task AddDrive_NullablePropertyReceiver_ShouldRewriteToWithDrive()
+		{
+			// Nullable-annotated property type: PropertyDeclarationSyntax.Type is a
+			// NullableTypeSyntax wrapping IdentifierName. The retargetability check
+			// recurses through the nullable wrapper.
+			const string source = """
+				#nullable enable
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public MockFileSystem? Fs { get; set; }
+					public void Run() => {|#0:Fs!.AddDrive("D:", new MockDriveData())|};
+				}
+				""";
+
+			const string fixedSource = """
+				#nullable enable
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public MockFileSystem? Fs { get; set; }
+					public void Run() => Fs!.WithDrive("D:");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Fact]
 		public async Task AddDrive_AliasQualifiedReceiverDeclaration_HasNoFix()
 		{
 			// The parameter declaration is alias-qualified (`TestableIo.MockFileSystem`).
