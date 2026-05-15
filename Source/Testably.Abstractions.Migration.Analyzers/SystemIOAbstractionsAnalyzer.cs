@@ -118,10 +118,10 @@ public class SystemIOAbstractionsAnalyzer : DiagnosticAnalyzer
 		bool isWrite = propertyRef.Parent is IAssignmentOperation assignment
 		               && assignment.Target == propertyRef;
 
-		// Property assignments inside an object initializer (`new MockFileData("x") {
-		// Attributes = ... }`) are part of construction and belong to the AddFile /
-		// initializer-expansion rewrite (Phase 3.5). Surfacing them here would
-		// double-flag a single user-visible call site.
+		// Skip property assignments inside an object-initializer expression. They are
+		// part of MockFileData construction and belong to the AddFile or initializer
+		// expansion rewrite in Phase 3.5. Reporting them here would double-flag a
+		// single user-visible call site.
 		if (isWrite
 		    && propertyRef.Parent?.Parent is IObjectOrCollectionInitializerOperation)
 		{

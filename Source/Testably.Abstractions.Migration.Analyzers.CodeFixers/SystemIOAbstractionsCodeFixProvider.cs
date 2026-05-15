@@ -524,7 +524,10 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		// commas without spaces, which the test framework's formatter would otherwise
 		// repair but ParseStatement preserves verbatim.
 		StatementSyntax newPrimary = SyntaxFactory.ParseStatement(
-			$"{indentation}{rewritten.NormalizeWhitespace()};{newline}");
+				$"{rewritten.NormalizeWhitespace()};")
+			.WithLeadingTrivia(originalStatement.GetLeadingTrivia())
+			.WithTrailingTrivia(originalStatement.GetTrailingTrivia());
+
 		List<StatementSyntax> followUps = shape.Value.InitializerProperties
 			.Select(prop => SyntaxFactory.ParseStatement(
 				$"{indentation}{receiverText}.File.{MapMockFileDataInitializerProperty(prop.Key)}({pathText}, {prop.Value.ToString().Trim()});{newline}"))
@@ -577,78 +580,117 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	private static MockFileDataShape? ClassifyMockFileDataExpression(
 		ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken cancellationToken)
 	{
-		// Allow a literal `new MockFileData(...)` and, since Phase 3.5, also one with
-		// an object initializer whose assignments are all to supported properties.
-		InitializerExpressionSyntax? initializer = expression switch
-		{
-			ObjectCreationExpressionSyntax oc => oc.Initializer,
-			ImplicitObjectCreationExpressionSyntax ic => ic.Initializer,
-			_ => null,
-		};
-		ArgumentListSyntax? argList = expression switch
-		{
-			ObjectCreationExpressionSyntax oc => oc.ArgumentList,
-			ImplicitObjectCreationExpressionSyntax ic => ic.ArgumentList,
-			_ => null,
-		};
-		if (argList is null)
+		if (!TryExtractCreationParts(expression, out ArgumentListSyntax? argList,
+			    out InitializerExpressionSyntax? initializer))
 		{
 			return null;
 		}
 
-		List<KeyValuePair<string, ExpressionSyntax>> initializerProps = [];
-		if (initializer is not null && initializer.Expressions.Count > 0)
+		List<KeyValuePair<string, ExpressionSyntax>>? initializerProps =
+			TryParseInitializerProperties(initializer);
+		if (initializerProps is null)
 		{
-			foreach (ExpressionSyntax entry in initializer.Expressions)
-			{
-				if (entry is not AssignmentExpressionSyntax assignment
-				    || assignment.Left is not IdentifierNameSyntax id
-				    || MapMockFileDataInitializerProperty(id.Identifier.Text) is null)
-				{
-					return null;
-				}
-
-				initializerProps.Add(new KeyValuePair<string, ExpressionSyntax>(
-					id.Identifier.Text, assignment.Right));
-			}
+			return null;
 		}
 
+		if (!TryGetMockFileDataConstructor(expression, semanticModel, cancellationToken,
+			    out IMethodSymbol? ctor))
+		{
+			return null;
+		}
+
+		return TryMatchMockFileDataOverload(ctor!.Parameters, argList!.Arguments, initializerProps);
+	}
+
+	private static bool TryExtractCreationParts(
+		ExpressionSyntax expression,
+		out ArgumentListSyntax? argList,
+		out InitializerExpressionSyntax? initializer)
+	{
+		(argList, initializer) = expression switch
+		{
+			ObjectCreationExpressionSyntax oc => (oc.ArgumentList, oc.Initializer),
+			ImplicitObjectCreationExpressionSyntax ic => (ic.ArgumentList, ic.Initializer),
+			_ => (null, null),
+		};
+		return argList is not null;
+	}
+
+	private static List<KeyValuePair<string, ExpressionSyntax>>? TryParseInitializerProperties(
+		InitializerExpressionSyntax? initializer)
+	{
+		List<KeyValuePair<string, ExpressionSyntax>> result = [];
+		if (initializer is null || initializer.Expressions.Count == 0)
+		{
+			return result;
+		}
+
+		foreach (ExpressionSyntax entry in initializer.Expressions)
+		{
+			if (entry is not AssignmentExpressionSyntax assignment
+			    || assignment.Left is not IdentifierNameSyntax id
+			    || MapMockFileDataInitializerProperty(id.Identifier.Text) is null)
+			{
+				return null;
+			}
+
+			result.Add(new KeyValuePair<string, ExpressionSyntax>(id.Identifier.Text, assignment.Right));
+		}
+
+		return result;
+	}
+
+	private static bool TryGetMockFileDataConstructor(
+		ExpressionSyntax expression,
+		SemanticModel semanticModel,
+		CancellationToken cancellationToken,
+		out IMethodSymbol? ctor)
+	{
+		ctor = null;
 		SymbolInfo info = semanticModel.GetSymbolInfo(expression, cancellationToken);
-		if (info.Symbol is not IMethodSymbol { MethodKind: MethodKind.Constructor, } ctor
-		    || ctor.ContainingType is not { Name: "MockFileData", } containing
+		if (info.Symbol is not IMethodSymbol { MethodKind: MethodKind.Constructor, } found
+		    || found.ContainingType is not { Name: "MockFileData", } containing
 		    || containing.ContainingNamespace?.ToDisplayString()
 		    != "System.IO.Abstractions.TestingHelpers")
 		{
-			return null;
+			return false;
 		}
 
-		ImmutableArray<IParameterSymbol> parameters = ctor.Parameters;
+		ctor = found;
+		return true;
+	}
+
+	private static MockFileDataShape? TryMatchMockFileDataOverload(
+		ImmutableArray<IParameterSymbol> parameters,
+		SeparatedSyntaxList<ArgumentSyntax> arguments,
+		List<KeyValuePair<string, ExpressionSyntax>> initializerProps)
+	{
 		if (parameters.Length == 1
 		    && parameters[0].Type.SpecialType == SpecialType.System_String
-		    && argList.Arguments.Count == 1)
+		    && arguments.Count == 1)
 		{
 			return new MockFileDataShape(
-				MockFileDataKind.Text, argList.Arguments[0].Expression, null, initializerProps);
+				MockFileDataKind.Text, arguments[0].Expression, null, initializerProps);
 		}
 
 		if (parameters.Length == 2
 		    && parameters[0].Type.SpecialType == SpecialType.System_String
 		    && parameters[1].Type is { Name: "Encoding", ContainingNamespace.Name: "Text", }
-		    && argList.Arguments.Count == 2)
+		    && arguments.Count == 2)
 		{
 			return new MockFileDataShape(
 				MockFileDataKind.Text,
-				argList.Arguments[0].Expression,
-				argList.Arguments[1].Expression,
+				arguments[0].Expression,
+				arguments[1].Expression,
 				initializerProps);
 		}
 
 		if (parameters.Length == 1
 		    && parameters[0].Type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, }
-		    && argList.Arguments.Count == 1)
+		    && arguments.Count == 1)
 		{
 			return new MockFileDataShape(
-				MockFileDataKind.Bytes, argList.Arguments[0].Expression, null, initializerProps);
+				MockFileDataKind.Bytes, arguments[0].Expression, null, initializerProps);
 		}
 
 		// MockFileData(MockFileData template) and any other overload are out of scope here.
@@ -786,7 +828,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		string variableName = localDecl.Declaration.Variables[0].Identifier.Text;
 		(string indentation, string newline) = DetectIndentationAndNewline(localDecl);
 		List<StatementSyntax> followUps = entries
-			.Select(entry => BuildFollowUpStatement(variableName, entry, indentation, newline))
+			.SelectMany(entry => BuildFollowUpStatements(variableName, entry, indentation, newline))
 			.ToList();
 
 		SyntaxList<StatementSyntax> updatedStatements = block!.Statements;
@@ -888,17 +930,28 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		return result;
 	}
 
-	private static StatementSyntax BuildFollowUpStatement(
+	private static IEnumerable<StatementSyntax> BuildFollowUpStatements(
 		string receiverName, DictionaryEntryShape entry, string indentation, string newline)
 	{
 		string newMethod = entry.Value.Kind == MockFileDataKind.Bytes ? "WriteAllBytes" : "WriteAllText";
 		string args = FormatArgumentList(entry.Key, entry.Value);
 
-		// Parse the statement from text so the trivia is non-elastic — otherwise the
-		// Formatter rewrites both the inserted line and the enclosing block's closing
-		// brace, defeating the surrounding indentation style.
-		string text = $"{indentation}{receiverName}.File.{newMethod}({args});{newline}";
-		return SyntaxFactory.ParseStatement(text);
+		// Parse statements from text so the trivia is non-elastic; otherwise the
+		// Formatter normalizes the inserted lines and the enclosing block's closing
+		// brace, breaking the surrounding indentation style.
+		yield return SyntaxFactory.ParseStatement(
+			$"{indentation}{receiverName}.File.{newMethod}({args});{newline}");
+
+		// Emit one SetXxx call per initializer property so attributes / future
+		// supported metadata aren't silently dropped from the dictionary entry.
+		string keyText = entry.Key.ToString().Trim();
+		foreach (KeyValuePair<string, ExpressionSyntax> prop in entry.Value.InitializerProperties)
+		{
+			string setMethod = MapMockFileDataInitializerProperty(prop.Key)!;
+			string valueText = prop.Value.ToString().Trim();
+			yield return SyntaxFactory.ParseStatement(
+				$"{indentation}{receiverName}.File.{setMethod}({keyText}, {valueText});{newline}");
+		}
 	}
 
 	private static string FormatArgumentList(ExpressionSyntax key, MockFileDataShape shape)
@@ -1028,6 +1081,16 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return false;
 		}
 
+		// Defensive: even when the property reference is reachable here as a read, it
+		// might also be the LHS of a compound assignment (`fs.GetFile(p).Attributes |=
+		// FileAttributes.ReadOnly`). Rewriting to a getter call would put the getter on
+		// the LHS of the compound — not assignable. Bail for any assignment-target use.
+		if (memberAccess.Parent is AssignmentExpressionSyntax assignment
+		    && assignment.Left == memberAccess)
+		{
+			return false;
+		}
+
 		receiver = getFileAccess.Expression;
 		pathArg = invocation.ArgumentList.Arguments[0];
 		return true;
@@ -1087,9 +1150,9 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			return document;
 		}
 
-		// Build the new statement via ParseStatement(text) so the trivia is non-elastic;
-		// otherwise the Formatter normalizes the inserted statement and the enclosing
-		// block's closing brace, breaking the surrounding indentation style.
+		// Build the new statement by parsing it from text. The resulting trivia is
+		// non-elastic, so the Formatter leaves the inserted statement and the
+		// enclosing block's closing brace alone, preserving the source's indentation.
 		string receiverText = receiver!.ToString().Trim();
 		string pathText = pathArg!.ToString().Trim();
 		string valueText = value!.ToString().Trim();

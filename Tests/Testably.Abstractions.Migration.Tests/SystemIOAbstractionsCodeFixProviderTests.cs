@@ -394,6 +394,8 @@ public class SystemIOAbstractionsCodeFixProviderTests
 	public async Task AccessorAddFile_WithUnsupportedInitializerProperty_HasNoFix()
 	{
 		// LastWriteTime in object initializers is deferred (DateTime vs DateTimeOffset).
+		// Use a block body so the test isolates the unsupported-property check from the
+		// block-context gate that already suppresses expression-bodied AddFile sites.
 		const string source = """
 			using System;
 			using System.IO.Abstractions.TestingHelpers;
@@ -401,7 +403,9 @@ public class SystemIOAbstractionsCodeFixProviderTests
 			public class C
 			{
 				public void Run(MockFileSystem fs)
-					=> {|#0:fs.AddFile("/foo", new MockFileData("x") { LastWriteTime = DateTimeOffset.UtcNow })|};
+				{
+					{|#0:fs.AddFile("/foo", new MockFileData("x") { LastWriteTime = DateTimeOffset.UtcNow })|};
+				}
 			}
 			""";
 
@@ -561,6 +565,48 @@ public class SystemIOAbstractionsCodeFixProviderTests
 					var fs = new MockFileSystem(o => o.UseCurrentDirectory("/work"));
 					fs.File.WriteAllText("/a", "hello");
 					fs.File.WriteAllBytes("/b", bytes);
+				}
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			fixedSource);
+	}
+
+	[Fact]
+	public async Task FilesConstructor_DictionaryEntryWithAttributes_ExpandsSetAttributesFollowUp()
+	{
+		const string source = """
+			using System.Collections.Generic;
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run()
+				{
+					var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+					{
+						["/foo"] = new MockFileData("hello") { Attributes = FileAttributes.ReadOnly },
+					})|};
+				}
+			}
+			""";
+
+		const string fixedSource = """
+			using System.Collections.Generic;
+			using System.IO;
+			using Testably.Abstractions.Testing;
+
+			public class C
+			{
+				public void Run()
+				{
+					var fs = new MockFileSystem();
+					fs.File.WriteAllText("/foo", "hello");
+					fs.File.SetAttributes("/foo", FileAttributes.ReadOnly);
 				}
 			}
 			""";
@@ -863,6 +909,31 @@ public class SystemIOAbstractionsCodeFixProviderTests
 			public class C
 			{
 				public FileShare Read(MockFileSystem fs) => {|#0:fs.GetFile("/a").AllowedFileShare|};
+			}
+			""";
+
+		await Verifier.VerifyCodeFixAsync(
+			source,
+			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+			source);
+	}
+
+	[Fact]
+	public async Task MockFileDataAccess_CompoundAssignment_HasNoFix()
+	{
+		// `|=` is a compound assignment. The read-side rewrite would put a getter call
+		// on the LHS (`fs.File.GetAttributes(p) |= ...`), which is not assignable. The
+		// write-side fix only handles simple `=`, so neither fix should run.
+		const string source = """
+			using System.IO;
+			using System.IO.Abstractions.TestingHelpers;
+
+			public class C
+			{
+				public void Run(MockFileSystem fs)
+				{
+					{|#0:fs.GetFile("/a").Attributes|} |= FileAttributes.ReadOnly;
+				}
 			}
 			""";
 
