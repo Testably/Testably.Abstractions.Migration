@@ -2,6 +2,44 @@
 
 	<PropertyGroup>
 		<RootNamespace>Testably.Abstractions.Migration</RootNamespace>
+		<!--
+			This is a one-shot dev tool: install, run the migration, uninstall.
+			DevelopmentDependency=true marks the package as dev-only so it does not
+			propagate to the consumer's transitive dependencies and is auto-treated
+			with PrivateAssets=all. Consumers must reference Testably.Abstractions.Testing
+			themselves so the dependency survives the migration package's removal.
+		-->
+		<DevelopmentDependency>true</DevelopmentDependency>
+		<!--
+			Pack runs separately from build (see Pipeline/Build.Pack.cs). Adding
+			ProjectReference items to the analyzer projects from here was found to
+			create a duplicate MSBuild graph node for those analyzers under parallel
+			CI builds, racing on bin/.../deps.json files and failing GenerateDepsFile
+			with "file in use". Disabling pack-on-build and packing separately with
+			NoBuild after the slnx is fully built sidesteps the race entirely. This
+			project must therefore always be built / packed via the .slnx, not as a
+			standalone csproj.
+		-->
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<!--
+			Pack the analyzer + codefix DLLs from their sibling projects' bin output.
+			Those projects are built by the slnx via the test / playground project
+			references; by the time Pack runs (after Compile in the Nuke pipeline) the
+			DLLs are guaranteed to exist. Paths use $(TargetFramework) and $(Configuration)
+			to track the central settings; PackagePath uses a trailing slash to match
+			sibling Pack metadata in the codebase.
+		-->
+		<None Include="..\Testably.Abstractions.Migration.Analyzers\bin\$(Configuration)\$(TargetFramework)\Testably.Abstractions.Migration.Analyzers.dll"
+			  Pack="true"
+			  PackagePath="analyzers/dotnet/cs/"
+			  Visible="false"/>
+		<None Include="..\Testably.Abstractions.Migration.Analyzers.CodeFixers\bin\$(Configuration)\$(TargetFramework)\Testably.Abstractions.Migration.Analyzers.CodeFixers.dll"
+			  Pack="true"
+			  PackagePath="analyzers/dotnet/cs/"
+			  Visible="false"/>
+	</ItemGroup>
 
 </Project>

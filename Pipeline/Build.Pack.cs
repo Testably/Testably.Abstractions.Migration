@@ -5,7 +5,9 @@ using System.Text;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
+using Nuke.Common.Tools.DotNet;
 using Nuke.Common.Utilities.Collections;
+using static Nuke.Common.Tools.DotNet.DotNetTasks;
 using static Serilog.Log;
 
 // ReSharper disable AllUnderscoreLocalParameterName
@@ -58,6 +60,28 @@ partial class Build
 		{
 			AbsolutePath packagesDirectory = ArtifactsDirectory / "Packages";
 			packagesDirectory.CreateOrCleanDirectory();
+
+			// Pack the meta-package separately from the slnx build. The meta-package
+			// csproj disables GeneratePackageOnBuild because adding ProjectReferences
+			// to the analyzer projects from the meta-package was found to create a
+			// duplicate MSBuild graph node for those analyzers under parallel CI
+			// builds, racing on bin/.../deps.json files and failing GenerateDepsFile
+			// with "file in use". Packing here with NoBuild after Compile sidesteps
+			// the race entirely: the slnx build has already produced every analyzer
+			// DLL the meta-package needs to bundle into analyzers/dotnet/cs/. Pack
+			// runs against the .slnx (not the csproj) so $(SolutionDir) resolves for
+			// the README pack target; only the meta-package is IsPackable=true so it
+			// is the only project actually packed.
+			DotNetPack(s => s
+				.SetProject(Solution.Path)
+				.SetConfiguration(Configuration)
+				.EnableNoLogo()
+				.EnableNoRestore()
+				.EnableNoBuild()
+				.SetVersion(MainVersion.FileVersion + MainVersion.PreRelease)
+				.SetAssemblyVersion(MainVersion.FileVersion)
+				.SetFileVersion(MainVersion.FileVersion)
+				.SetInformationalVersion(MainVersion.InformationalVersion));
 
 			List<string> packages = new();
 			foreach (Project project in new[]
