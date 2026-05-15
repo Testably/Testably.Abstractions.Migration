@@ -135,6 +135,48 @@ public class AccessorMethodTests
 		await That(drive!.TotalSize).IsEqualTo(totalSize);
 	}
 
+	[Fact]
+	public async Task AllFiles_EnumeratesEveryAddedFile()
+	{
+		// Phase 5.1 manual-review fixture: Testably has no AllFiles equivalent. The
+		// migration target depends on the user's drive layout — Directory.EnumerateFiles
+		// against the right root, or DriveInfo.GetDrives() + SelectMany for multi-drive
+		// setups. The playground keeps the parity baseline so a human can decide.
+		MockFileSystem fs = new();
+		fs.AddFile("/a/one.txt", new MockFileData("1"));
+		fs.AddFile("/b/two.txt", new MockFileData("2"));
+
+		bool sawOne = false;
+		bool sawTwo = false;
+		foreach (string path in fs.AllFiles)
+		{
+			sawOne |= path.EndsWith("one.txt", StringComparison.Ordinal);
+			sawTwo |= path.EndsWith("two.txt", StringComparison.Ordinal);
+		}
+
+		await That(sawOne).IsTrue();
+		await That(sawTwo).IsTrue();
+	}
+
+	[Fact]
+	public async Task AllDirectories_EnumeratesEveryAddedDirectory()
+	{
+		MockFileSystem fs = new();
+		fs.AddDirectory("/a/x");
+		fs.AddDirectory("/b/y");
+
+		bool sawX = false;
+		bool sawY = false;
+		foreach (string path in fs.AllDirectories)
+		{
+			sawX |= path.EndsWith("x", StringComparison.Ordinal);
+			sawY |= path.EndsWith("y", StringComparison.Ordinal);
+		}
+
+		await That(sawX).IsTrue();
+		await That(sawY).IsTrue();
+	}
+
 	private static IDriveInfo? FindDriveByName(IDriveInfo[] drives, string prefix)
 	{
 		foreach (IDriveInfo drive in drives)

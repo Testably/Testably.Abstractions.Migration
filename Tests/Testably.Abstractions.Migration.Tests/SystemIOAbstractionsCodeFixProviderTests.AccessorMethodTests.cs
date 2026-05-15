@@ -678,5 +678,32 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Theory]
+		[InlineData("AllPaths")]
+		[InlineData("AllFiles")]
+		[InlineData("AllDirectories")]
+		[InlineData("AllDrives")]
+		public async Task EnumerationProperty_HasNoFix(string property)
+		{
+			// Testably has no 1:1 equivalent for the IMockFileDataAccessor enumeration
+			// properties. The natural replacements (Directory.EnumerateFiles, etc.)
+			// require a root path or drive scope the analyzer cannot infer safely, so
+			// the fix dispatcher intentionally falls through with no rewrite.
+			string source = $$"""
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public IEnumerable<string> Read(MockFileSystem fs) => {|#0:fs.{{property}}|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

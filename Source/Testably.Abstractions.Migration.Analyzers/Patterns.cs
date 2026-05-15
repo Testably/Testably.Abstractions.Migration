@@ -57,6 +57,27 @@ public static class Patterns
 	/// </summary>
 	public const string MockFileSystemAddDrive = "MockFileSystem.AddDrive";
 
+	// ── Enumeration properties (Phase 5.1) ────────────────────────────────
+	// These IMockFileDataAccessor properties enumerate the whole mocked file
+	// system. Testably has no direct equivalent — the natural replacements
+	// (Directory.EnumerateFiles/EnumerateDirectories, DriveInfo.GetDrives,
+	// etc.) need a root path or drive scope the analyzer cannot infer safely.
+	// Each property gets its own pattern id so manual migration is
+	// discoverable per call site; the code-fix provider intentionally
+	// registers no rewrite.
+
+	/// <summary><c>fs.AllPaths</c> — union of files and directories across the mocked file system.</summary>
+	public const string MockFileSystemAllPaths = "MockFileSystem.AllPaths";
+
+	/// <summary><c>fs.AllFiles</c> — every mocked file path.</summary>
+	public const string MockFileSystemAllFiles = "MockFileSystem.AllFiles";
+
+	/// <summary><c>fs.AllDirectories</c> — every mocked directory path.</summary>
+	public const string MockFileSystemAllDirectories = "MockFileSystem.AllDirectories";
+
+	/// <summary><c>fs.AllDrives</c> — every mocked drive name.</summary>
+	public const string MockFileSystemAllDrives = "MockFileSystem.AllDrives";
+
 	// ── MockFileData property access ──────────────────────────────────────
 
 	/// <summary>A read access to a <c>MockFileData</c> property.</summary>
