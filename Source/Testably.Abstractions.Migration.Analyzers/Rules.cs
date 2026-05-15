@@ -9,6 +9,9 @@ public static class Rules
 {
 	private const string UsageCategory = "Usage";
 
+	private const string DocsBaseUrl =
+		"https://docs.testably.org/Testably.Abstractions/Migration";
+
 	/// <summary>
 	///     Migration rule for <c>System.IO.Abstractions.TestingHelpers</c> usage. Flags any usage of
 	///     <c>new MockFileSystem(...)</c>, <c>new MockFileData(...)</c> or the <c>IMockFileDataAccessor</c>
@@ -29,6 +32,7 @@ public static class Rules
 		severity,
 		true,
 		new LocalizableResourceString(diagnosticId + "Description", Resources.ResourceManager,
-			typeof(Resources))
+			typeof(Resources)),
+		helpLinkUri: DocsBaseUrl
 	);
 }
