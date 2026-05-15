@@ -84,6 +84,21 @@ public class ManualReviewTests
 		await That(clone.TextContents).IsEqualTo("hello");
 	}
 
+	[Fact]
+	public async Task MockFileSystem_MockTime_ReturnsSelfForFluentChaining()
+	{
+		// TestableIO calls the supplied delegate every time it needs a timestamp.
+		// Testably installs a fixed-then-mutable MockTimeSystem at construction with
+		// no equivalent post-construction fluent API, so this site is reported with
+		// pattern id `MockFileSystem.MockTime` and left for manual migration. The
+		// playground only needs to keep the call shape compiling; the timestamp
+		// semantics of MockTime are out of scope for the parity baseline.
+		MockFileSystem fs = new();
+		MockFileSystem chained = fs.MockTime(() => DateTime.UnixEpoch);
+
+		await That(chained).IsSameAs(fs);
+	}
+
 	private sealed class MyMockFs : MockFileSystem
 	{
 	}

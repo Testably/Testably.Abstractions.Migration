@@ -57,6 +57,19 @@ public static class Patterns
 	/// </summary>
 	public const string MockFileSystemAddDrive = "MockFileSystem.AddDrive";
 
+	/// <summary>
+	///     <c>fs.MockTime(Func&lt;DateTime&gt;)</c>. Manual review (Phase 5.3): TestableIO
+	///     calls the supplied delegate on every timestamp request, while Testably installs
+	///     a fixed-then-mutable <c>MockTimeSystem</c> at construction. The two have no
+	///     observably-equivalent automatic rewrite for arbitrary delegates, and the
+	///     equivalent surface (<c>o =&gt; o.UseTimeSystem(...)</c>) lives in the
+	///     <c>MockFileSystemOptions</c> lambda — a cross-statement fold that conflicts
+	///     with the parameterless / options-ctor fixes when both touch the construction.
+	///     A future sub-phase may add an opt-in fix for the narrow constant-DateTime
+	///     lambda shape with a custom <c>FixAllProvider</c>.
+	/// </summary>
+	public const string MockFileSystemMockTime = "MockFileSystem.MockTime";
+
 	// ── Enumeration properties (Phase 5.1) ────────────────────────────────
 	// These IMockFileDataAccessor properties enumerate the whole mocked file
 	// system. Testably has no direct equivalent — the natural replacements
