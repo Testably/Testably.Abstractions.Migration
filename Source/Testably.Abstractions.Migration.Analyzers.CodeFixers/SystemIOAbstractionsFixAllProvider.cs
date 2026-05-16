@@ -26,11 +26,12 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 	{
 	}
 
-	protected override Task<Document?> FixAllAsync(
+	protected override async Task<Document?> FixAllAsync(
 		FixAllContext fixAllContext,
 		Document document,
 		ImmutableArray<Diagnostic> diagnostics)
-		=> MigrateDocumentAsync(document, diagnostics, fixAllContext.CancellationToken);
+		=> await MigrateDocumentAsync(document, diagnostics, fixAllContext.CancellationToken)
+			.ConfigureAwait(false);
 
 	/// <summary>
 	///     Migrates every diagnostic in <paramref name="diagnostics" /> within
@@ -41,7 +42,7 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 	///     the per-diagnostic Fix re-discovers all sibling diagnostics in the document
 	///     and routes through here so one click migrates the whole file (Mockolate-style).
 	/// </summary>
-	internal static async Task<Document?> MigrateDocumentAsync(
+	internal static async Task<Document> MigrateDocumentAsync(
 		Document document,
 		ImmutableArray<Diagnostic> diagnostics,
 		CancellationToken cancellationToken)
@@ -58,10 +59,51 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 			return document;
 		}
 
-		// Source-order pass: annotate each diagnostic's target node so we can locate it
-		// after prior rewrites have transformed its surroundings. The same diagnostic id
-		// may legitimately appear on overlapping spans (e.g. nested initializers); a
-		// fresh annotation per work item keeps them addressable independently.
+		(CompilationUnitSyntax annotatedCu, List<WorkItem> work) = CollectAndAnnotate(originalCu, diagnostics);
+		if (work.Count == 0)
+		{
+			return document;
+		}
+
+		// Compute the using-directive change up front from work-item intent rather than
+		// from rewrite success. A block-level rewrite (e.g. FilesCtor initializer
+		// expansion) can absorb a sibling annotated node so that its later dispatch
+		// returns null — but the absorbed item's using-change contribution must still
+		// land, otherwise the file would be left half-migrated.
+		SystemIOAbstractionsCodeFixProvider.UsingChange maxUsingChange =
+			SystemIOAbstractionsCodeFixProvider.UsingChange.None;
+		foreach (WorkItem item in work)
+		{
+			SystemIOAbstractionsCodeFixProvider.UsingChange change =
+				SystemIOAbstractionsCodeFixProvider.GetUsingChange(item.Pattern);
+			if (change > maxUsingChange)
+			{
+				maxUsingChange = change;
+			}
+		}
+
+		(CompilationUnitSyntax finalCu, bool anyRewriteSucceeded) = await ApplyRewritesAsync(
+			document, annotatedCu, work, cancellationToken).ConfigureAwait(false);
+
+		// Suppress the using swap when no rewrite landed. Otherwise we'd add the Testably
+		// using to a file whose code still references TestingHelpers — non-compiling.
+		if (anyRewriteSucceeded
+		    && maxUsingChange != SystemIOAbstractionsCodeFixProvider.UsingChange.None)
+		{
+			finalCu = SystemIOAbstractionsCodeFixProvider.ApplyUsingChange(finalCu, maxUsingChange);
+		}
+
+		return document.WithSyntaxRoot(finalCu);
+	}
+
+	/// <summary>
+	///     Walks the diagnostics in source order, finds each one's target node in the
+	///     original compilation unit, and annotates every target so subsequent rewrites
+	///     can locate it via <see cref="SyntaxNode.GetAnnotatedNodes(SyntaxAnnotation)" />.
+	/// </summary>
+	private static (CompilationUnitSyntax AnnotatedCu, List<WorkItem> Work) CollectAndAnnotate(
+		CompilationUnitSyntax originalCu, ImmutableArray<Diagnostic> diagnostics)
+	{
 		List<WorkItem> work = [];
 		Dictionary<SyntaxNode, List<SyntaxAnnotation>> nodeToAnnotations = new();
 		foreach (Diagnostic diagnostic in diagnostics.OrderBy(d => d.Location.SourceSpan.Start))
@@ -91,75 +133,99 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 
 		if (work.Count == 0)
 		{
-			return document;
+			return (originalCu, work);
 		}
 
 		CompilationUnitSyntax annotatedCu = originalCu.ReplaceNodes(
 			nodeToAnnotations.Keys,
 			(original, _) => original.WithAdditionalAnnotations([..nodeToAnnotations[original]]));
+		return (annotatedCu, work);
+	}
 
-		Document currentDoc = document.WithSyntaxRoot(annotatedCu);
-		SystemIOAbstractionsCodeFixProvider.UsingChange maxUsingChange =
-			SystemIOAbstractionsCodeFixProvider.UsingChange.None;
+	/// <summary>
+	///     Applies each pattern's pure rewriter to <paramref name="annotatedCu" /> in
+	///     sequence. Stays in-memory between iterations for purely-syntactic patterns and
+	///     only round-trips through a fresh <see cref="Document" /> /
+	///     <see cref="SemanticModel" /> when the pattern actually needs semantic info —
+	///     that avoids an O(N) re-compile per rewrite for the (common) syntactic patterns.
+	///     When a round-trip is necessary, both the rewrite target and the semantic model
+	///     are taken from the round-tripped tree, since <see cref="Document.WithSyntaxRoot" />
+	///     may produce a tree whose nodes are not reference-equal to the input.
+	/// </summary>
+	private static async Task<(CompilationUnitSyntax FinalCu, bool AnyRewriteSucceeded)> ApplyRewritesAsync(
+		Document originalDocument,
+		CompilationUnitSyntax annotatedCu,
+		List<WorkItem> work,
+		CancellationToken cancellationToken)
+	{
+		CompilationUnitSyntax currentCu = annotatedCu;
+		bool anyRewriteSucceeded = false;
 
 		foreach (WorkItem item in work)
 		{
-			SyntaxNode? curRoot = await currentDoc
-				.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-			if (curRoot is not CompilationUnitSyntax curCu)
+			CompilationUnitSyntax? rewritten;
+			if (SystemIOAbstractionsCodeFixProvider.PatternNeedsSemanticModel(item.Pattern))
 			{
-				continue;
+				rewritten = await DispatchWithSemanticModelAsync(
+					originalDocument, currentCu, item, cancellationToken).ConfigureAwait(false);
+			}
+			else
+			{
+				SyntaxNode? currentTarget = currentCu.GetAnnotatedNodes(item.Annotation).FirstOrDefault();
+				if (currentTarget is null)
+				{
+					continue;
+				}
+
+				rewritten = SystemIOAbstractionsCodeFixProvider.DispatchPure(
+					item.Pattern, currentCu, currentTarget, semanticModel: null, cancellationToken);
 			}
 
-			// Annotations propagate through ReplaceNode/ReplaceNodes automatically. A null
-			// here means a prior block-level rewrite (AddFile/FilesCtor initializer
-			// expansion) replaced an enclosing statement and the annotated node was
-			// dropped — skip it; the surrounding rewrite already covered it.
-			SyntaxNode? currentTarget = curCu.GetAnnotatedNodes(item.Annotation).FirstOrDefault();
-			if (currentTarget is null)
-			{
-				continue;
-			}
-
-			// Re-acquire the semantic model from the live document. Earlier rewrites
-			// change the syntax tree; the original-document semantic model would return
-			// stale or null symbol info for nodes in the new tree.
-			SemanticModel? semanticModel = await currentDoc
-				.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-
-			CompilationUnitSyntax? rewritten = SystemIOAbstractionsCodeFixProvider.DispatchPure(
-				item.Pattern, curCu, currentTarget, semanticModel, cancellationToken);
 			if (rewritten is null)
 			{
 				continue;
 			}
 
-			currentDoc = currentDoc.WithSyntaxRoot(rewritten);
-
-			SystemIOAbstractionsCodeFixProvider.UsingChange change =
-				SystemIOAbstractionsCodeFixProvider.GetUsingChange(item.Pattern);
-			if (change > maxUsingChange)
-			{
-				maxUsingChange = change;
-			}
+			currentCu = rewritten;
+			anyRewriteSucceeded = true;
 		}
 
-		// Apply the using-directive change once, after every syntax rewrite. Doing it
-		// here (instead of inside each pattern's rewrite) is the entire point of this
-		// provider: it keeps the analyzer firing on remaining diagnostics during the
-		// pass, and produces a single deterministic text change at the using line.
-		if (maxUsingChange != SystemIOAbstractionsCodeFixProvider.UsingChange.None)
+		return (currentCu, anyRewriteSucceeded);
+	}
+
+	/// <summary>
+	///     Round-trips <paramref name="currentCu" /> through a document so the semantic
+	///     model binds to the live tree, then re-locates the work item's annotated target
+	///     in that round-tripped tree and dispatches the pattern's pure rewriter against
+	///     it. Returns the new compilation unit (still annotation-bearing) or
+	///     <see langword="null" /> if the target was absorbed or the rewrite is not
+	///     applicable.
+	/// </summary>
+	private static async Task<CompilationUnitSyntax?> DispatchWithSemanticModelAsync(
+		Document originalDocument,
+		CompilationUnitSyntax currentCu,
+		WorkItem item,
+		CancellationToken cancellationToken)
+	{
+		Document syncedDoc = originalDocument.WithSyntaxRoot(currentCu);
+		SyntaxNode? syncedRoot = await syncedDoc
+			.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (syncedRoot is not CompilationUnitSyntax syncedCu)
 		{
-			SyntaxNode? finalRoot = await currentDoc
-				.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-			if (finalRoot is CompilationUnitSyntax finalCu)
-			{
-				finalCu = SystemIOAbstractionsCodeFixProvider.ApplyUsingChange(finalCu, maxUsingChange);
-				currentDoc = currentDoc.WithSyntaxRoot(finalCu);
-			}
+			return null;
 		}
 
-		return currentDoc;
+		SyntaxNode? syncedTarget = syncedCu.GetAnnotatedNodes(item.Annotation).FirstOrDefault();
+		if (syncedTarget is null)
+		{
+			return null;
+		}
+
+		SemanticModel? semanticModel = await syncedDoc
+			.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+
+		return SystemIOAbstractionsCodeFixProvider.DispatchPure(
+			item.Pattern, syncedCu, syncedTarget, semanticModel, cancellationToken);
 	}
 
 	private readonly struct WorkItem

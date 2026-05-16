@@ -1740,6 +1740,17 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	};
 
 	/// <summary>
+	///     Whether a pattern's pure rewriter requires a <see cref="SemanticModel" />.
+	///     Used by the fix-all loop to avoid an O(N) per-iteration document round-trip
+	///     when the rewrite is purely syntactic — most patterns fall in that bucket.
+	/// </summary>
+	internal static bool PatternNeedsSemanticModel(string pattern) => pattern
+		is Patterns.AccessorAddFile
+		or Patterns.MockFileSystemFilesConstructor
+		or Patterns.MockFileSystemFilesOptionsConstructor
+		or Patterns.MockFileSystemAddFilesFromEmbeddedNamespace;
+
+	/// <summary>
 	///     Applies a using-directive change to the compilation unit. Called once at the end
 	///     of a fix pipeline so that overlapping using edits from multiple rewrites collapse
 	///     into a single deterministic change.
@@ -1779,9 +1790,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				.ConfigureAwait(false);
 		}
 
-		Document? result = await SystemIOAbstractionsFixAllProvider
+		return await SystemIOAbstractionsFixAllProvider
 			.MigrateDocumentAsync(document, siblings, cancellationToken).ConfigureAwait(false);
-		return result ?? document;
 	}
 
 	/// <summary>
