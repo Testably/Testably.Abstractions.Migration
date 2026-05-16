@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Testably.Abstractions.Migration.Analyzers;
 
@@ -29,7 +30,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	/// <inheritdoc cref="CodeFixProvider.GetFixAllProvider" />
 	public override FixAllProvider? GetFixAllProvider()
-		=> WellKnownFixAllProviders.BatchFixer;
+		=> SystemIOAbstractionsFixAllProvider.Instance;
 
 	/// <inheritdoc cref="CodeFixProvider.RegisterCodeFixesAsync(CodeFixContext)" />
 	public override async Task RegisterCodeFixesAsync(CodeFixContext context)
@@ -119,7 +120,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => RewriteUsingsAsync(context.Document, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileSystemDefaultConstructor, ct),
 				equivalenceKey: Patterns.MockFileSystemDefaultConstructor),
 			diagnostic);
 	}
@@ -157,16 +159,16 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		};
 	}
 
-	private static async Task<Document> RewriteUsingsAsync(Document document, CancellationToken cancellationToken)
+	/// <summary>
+	///     Pure rewriter for the default <c>new MockFileSystem()</c> constructor pattern.
+	///     The fix is using-directive-only; this helper just gates on the target node
+	///     shape and returns the compilation unit unchanged. The caller swaps the using.
+	/// </summary>
+	private static CompilationUnitSyntax? ApplyDefaultCtorPure(CompilationUnitSyntax cu, SyntaxNode target)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		compilationUnit = SwapToTestablyUsing(compilationUnit);
-		return document.WithSyntaxRoot(compilationUnit);
+		BaseObjectCreationExpressionSyntax? creation =
+			target.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
+		return creation is not null && HasUnqualifiedMockFileSystemTypeName(creation) ? cu : null;
 	}
 
 	// ── Pattern: MockFileSystem.ctor(options) ────────────────────────────────
@@ -188,39 +190,29 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyOptionsCtorRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileSystemOptionsConstructor, ct),
 				equivalenceKey: Patterns.MockFileSystemOptionsConstructor),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyOptionsCtorRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyOptionsCtorPure(CompilationUnitSyntax cu, SyntaxNode target)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		ObjectCreationExpressionSyntax? creation = node?.FirstAncestorOrSelf<ObjectCreationExpressionSyntax>();
+		ObjectCreationExpressionSyntax? creation = target.FirstAncestorOrSelf<ObjectCreationExpressionSyntax>();
 		if (creation?.ArgumentList is not { Arguments.Count: 1, } argList)
 		{
-			return document;
+			return null;
 		}
 
 		ArgumentListSyntax? newArgList = TryBuildTestablyOptionsArgList(argList.Arguments[0].Expression);
 		if (newArgList is null)
 		{
-			return document;
+			return null;
 		}
 
 		ObjectCreationExpressionSyntax newCreation =
 			creation.WithArgumentList(newArgList.WithTriviaFrom(argList));
-		compilationUnit = compilationUnit.ReplaceNode(creation, newCreation);
-		compilationUnit = SwapToTestablyUsing(compilationUnit);
-
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(creation, newCreation);
 	}
 
 	private static ArgumentListSyntax? TryBuildTestablyOptionsArgList(ExpressionSyntax optionsExpression)
@@ -339,7 +331,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyAccessorMethodRewriteAsync(context.Document, diagnostic, pattern, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic, pattern, ct),
 				equivalenceKey: pattern),
 			diagnostic);
 	}
@@ -353,20 +345,13 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		       == "System.IO.Abstractions.TestingHelpers";
 	}
 
-	private static async Task<Document> ApplyAccessorMethodRewriteAsync(
-		Document document, Diagnostic diagnostic, string pattern, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyAccessorMethodPure(
+		CompilationUnitSyntax cu, SyntaxNode target, string pattern)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		InvocationExpressionSyntax? invocation = target.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess)
 		{
-			return document;
+			return null;
 		}
 
 		ExpressionSyntax newExpression = pattern switch
@@ -385,11 +370,10 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		if (ReferenceEquals(newExpression, invocation))
 		{
-			return document;
+			return null;
 		}
 
-		compilationUnit = compilationUnit.ReplaceNode(invocation, newExpression.WithTriviaFrom(invocation));
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(invocation, newExpression.WithTriviaFrom(invocation));
 	}
 
 	private static InvocationExpressionSyntax BuildSubReceiverInvocation(
@@ -473,32 +457,20 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyAddFileRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.AccessorAddFile, ct),
 				equivalenceKey: Patterns.AccessorAddFile),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyAddFileRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyAddFilePure(
+		CompilationUnitSyntax cu, SyntaxNode target, SemanticModel semanticModel, CancellationToken cancellationToken)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-		if (semanticModel is null)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		InvocationExpressionSyntax? invocation = target.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
 		    || invocation.ArgumentList.Arguments.Count < 2)
 		{
-			return document;
+			return null;
 		}
 
 		ArgumentSyntax pathArg = invocation.ArgumentList.Arguments[0];
@@ -506,7 +478,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			invocation.ArgumentList.Arguments[1].Expression, semanticModel, cancellationToken);
 		if (shape is null)
 		{
-			return document;
+			return null;
 		}
 
 		InvocationExpressionSyntax rewritten = BuildAddFileReplacement(memberAccess, pathArg, shape.Value);
@@ -514,8 +486,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		// Without initializer properties, the rewrite is a 1:1 invocation swap.
 		if (shape.Value.InitializerProperties.Count == 0)
 		{
-			compilationUnit = compilationUnit.ReplaceNode(invocation, rewritten.WithTriviaFrom(invocation));
-			return document.WithSyntaxRoot(compilationUnit);
+			return cu.ReplaceNode(invocation, rewritten.WithTriviaFrom(invocation));
 		}
 
 		// With initializer properties, the expansion requires inserting follow-up
@@ -525,7 +496,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		if (invocation.Parent is not ExpressionStatementSyntax originalStatement
 		    || originalStatement.Parent is not BlockSyntax block)
 		{
-			return document;
+			return null;
 		}
 
 		(string indentation, string newline) = DetectIndentationAndNewline(originalStatement);
@@ -552,8 +523,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		updatedStatements = updatedStatements.InsertRange(index + 1, followUps);
 
 		BlockSyntax newBlock = block.WithStatements(updatedStatements);
-		compilationUnit = compilationUnit.ReplaceNode(block, newBlock);
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(block, newBlock);
 	}
 
 	private static InvocationExpressionSyntax BuildAddFileReplacement(
@@ -776,41 +746,31 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyFilesCtorRewriteAsync(context.Document, diagnostic, pattern, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic, pattern, ct),
 				equivalenceKey: pattern),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyFilesCtorRewriteAsync(
-		Document document, Diagnostic diagnostic, string pattern, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyFilesCtorPure(
+		CompilationUnitSyntax cu,
+		SyntaxNode target,
+		SemanticModel semanticModel,
+		string pattern,
+		CancellationToken cancellationToken)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-		if (semanticModel is null)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		if (node is null
-		    || !TryGetCreationInLocalDecl(node, out BaseObjectCreationExpressionSyntax? creation,
+		if (!TryGetCreationInLocalDecl(target, out BaseObjectCreationExpressionSyntax? creation,
 			    out ArgumentListSyntax? argList,
 			    out LocalDeclarationStatementSyntax? localDecl,
 			    out BlockSyntax? block))
 		{
-			return document;
+			return null;
 		}
 
 		List<DictionaryEntryShape>? entries = TryParseDictionaryEntries(
 			argList!.Arguments[0].Expression, semanticModel, cancellationToken);
 		if (entries is null)
 		{
-			return document;
+			return null;
 		}
 
 		ArgumentListSyntax newArgList = SyntaxFactory.ArgumentList();
@@ -819,7 +779,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			ArgumentListSyntax? built = TryBuildSecondCtorArgList(argList.Arguments[1], pattern);
 			if (built is null)
 			{
-				return document;
+				return null;
 			}
 
 			newArgList = built;
@@ -860,10 +820,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		updatedStatements = updatedStatements.InsertRange(index + 1, followUps);
 
 		BlockSyntax newBlock = block.WithStatements(updatedStatements);
-		compilationUnit = compilationUnit.ReplaceNode(block, newBlock);
-		compilationUnit = SwapToTestablyUsing(compilationUnit);
-
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(block, newBlock);
 	}
 
 	private static bool TryGetCreationInLocalDecl(
@@ -1104,29 +1061,21 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyPropertyReadRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileDataPropertyRead, ct),
 				equivalenceKey: Patterns.MockFileDataPropertyRead),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyPropertyReadRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyPropertyReadPure(CompilationUnitSyntax cu, SyntaxNode target)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		if (node is null
-		    || !TryMatchOneShotGetFileRead(node,
+		if (!TryMatchOneShotGetFileRead(target,
 			    out MemberAccessExpressionSyntax? memberAccess,
 			    out ExpressionSyntax? receiver,
 			    out ArgumentSyntax? pathArg,
 			    out string? newMethod))
 		{
-			return document;
+			return null;
 		}
 
 		InvocationExpressionSyntax replacement = SyntaxFactory.InvocationExpression(
@@ -1139,8 +1088,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 				SyntaxFactory.IdentifierName(newMethod!)),
 			SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(pathArg!.WithoutTrivia())));
 
-		compilationUnit = compilationUnit.ReplaceNode(memberAccess!, replacement.WithTriviaFrom(memberAccess!));
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(memberAccess!, replacement.WithTriviaFrom(memberAccess!));
 	}
 
 	private static bool TryMatchOneShotGetFileRead(
@@ -1216,23 +1164,15 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyPropertyWriteRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileDataPropertyWrite, ct),
 				equivalenceKey: Patterns.MockFileDataPropertyWrite),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyPropertyWriteRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyPropertyWritePure(CompilationUnitSyntax cu, SyntaxNode target)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		if (node is null
-		    || !TryMatchOneShotGetFileWrite(node,
+		if (!TryMatchOneShotGetFileWrite(target,
 			    out _,
 			    out ExpressionStatementSyntax? statement,
 			    out ExpressionSyntax? receiver,
@@ -1240,7 +1180,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			    out ExpressionSyntax? value,
 			    out string? newMethod))
 		{
-			return document;
+			return null;
 		}
 
 		// Build the new statement by parsing it from text. The resulting trivia is
@@ -1253,8 +1193,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		StatementSyntax parsed = SyntaxFactory.ParseStatement(text);
 		StatementSyntax newStatement = parsed.WithTriviaFrom(statement!);
 
-		compilationUnit = compilationUnit.ReplaceNode(statement!, newStatement);
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(statement!, newStatement);
 	}
 
 	private static bool TryMatchOneShotGetFileWrite(
@@ -1352,7 +1291,8 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyAddDriveRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileSystemAddDrive, ct),
 				equivalenceKey: Patterns.MockFileSystemAddDrive),
 			diagnostic);
 	}
@@ -1408,21 +1348,13 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			_ => false,
 		};
 
-	private static async Task<Document> ApplyAddDriveRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyAddDrivePure(CompilationUnitSyntax cu, SyntaxNode target)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		InvocationExpressionSyntax? invocation = target.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
 		    || invocation.ArgumentList.Arguments.Count != 2)
 		{
-			return document;
+			return null;
 		}
 
 		ArgumentSyntax driveNameArg = invocation.ArgumentList.Arguments[0];
@@ -1430,14 +1362,12 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		if (!TryClassifyMockDriveDataInitializer(driveDataExpr,
 			    out List<AssignmentExpressionSyntax>? assignments))
 		{
-			return document;
+			return null;
 		}
 
 		InvocationExpressionSyntax replacement = BuildWithDriveInvocation(
 			memberAccess.Expression, driveNameArg, assignments);
-		compilationUnit = compilationUnit.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
-		compilationUnit = SwapToTestablyUsing(compilationUnit);
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
 	}
 
 	private static bool TryClassifyMockDriveDataInitializer(
@@ -1625,32 +1555,20 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		context.RegisterCodeFix(
 			CodeAction.Create(
 				Resources.TestablyM001CodeFixTitle,
-				ct => ApplyAddFilesFromEmbeddedNamespaceRewriteAsync(context.Document, diagnostic, ct),
+				ct => ApplySinglePatternAsync(context.Document, diagnostic,
+					Patterns.MockFileSystemAddFilesFromEmbeddedNamespace, ct),
 				equivalenceKey: Patterns.MockFileSystemAddFilesFromEmbeddedNamespace),
 			diagnostic);
 	}
 
-	private static async Task<Document> ApplyAddFilesFromEmbeddedNamespaceRewriteAsync(
-		Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
+	private static CompilationUnitSyntax? ApplyAddFilesFromEmbeddedNamespacePure(
+		CompilationUnitSyntax cu, SyntaxNode target, SemanticModel semanticModel, CancellationToken cancellationToken)
 	{
-		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-		if (root is not CompilationUnitSyntax compilationUnit)
-		{
-			return document;
-		}
-
-		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-		if (semanticModel is null)
-		{
-			return document;
-		}
-
-		SyntaxNode? node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
-		InvocationExpressionSyntax? invocation = node?.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+		InvocationExpressionSyntax? invocation = target.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 		if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess
 		    || invocation.ArgumentList.Arguments.Count != 3)
 		{
-			return document;
+			return null;
 		}
 
 		ArgumentSyntax pathArg = invocation.ArgumentList.Arguments[0];
@@ -1662,7 +1580,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 			    cancellationToken,
 			    out string? relativePath))
 		{
-			return document;
+			return null;
 		}
 
 		MemberAccessExpressionSyntax newAccess = SyntaxFactory.MemberAccessExpression(
@@ -1691,9 +1609,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 		InvocationExpressionSyntax replacement = SyntaxFactory.InvocationExpression(
 			newAccess, SyntaxFactory.ArgumentList(args));
 
-		compilationUnit = compilationUnit.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
-		compilationUnit = EnsureTestablyUsing(compilationUnit);
-		return document.WithSyntaxRoot(compilationUnit);
+		return cu.ReplaceNode(invocation, replacement.WithTriviaFrom(invocation));
 	}
 
 	private static bool TryComputeRelativePathFromAssemblyAndLiteral(
@@ -1789,6 +1705,200 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 		return null;
 	}
+
+	// ── Shared: pattern dispatch & using-directive policy ───────────────────
+
+	/// <summary>
+	///     What change a pattern's rewrite needs to apply to the file's using directives
+	///     once the syntax rewrite is in place. Ordered by strength: <see cref="Swap" />
+	///     subsumes <see cref="Ensure" />, which subsumes <see cref="None" />.
+	/// </summary>
+	internal enum UsingChange
+	{
+		None = 0,
+		Ensure = 1,
+		Swap = 2,
+	}
+
+	/// <summary>
+	///     Maps a diagnostic <see cref="Patterns" /> id to the using-directive change its
+	///     rewrite needs. Patterns whose rewrite would leave the receiver typed as the
+	///     concrete <c>System.IO.Abstractions.TestingHelpers.MockFileSystem</c> require a
+	///     <see cref="UsingChange.Swap" /> (replace the using); patterns whose rewrite is an
+	///     extension method that needs the Testably namespace visible but does not retarget
+	///     the receiver require an <see cref="UsingChange.Ensure" /> (add the using).
+	/// </summary>
+	internal static UsingChange GetUsingChange(string pattern) => pattern switch
+	{
+		Patterns.MockFileSystemDefaultConstructor => UsingChange.Swap,
+		Patterns.MockFileSystemOptionsConstructor => UsingChange.Swap,
+		Patterns.MockFileSystemFilesConstructor => UsingChange.Swap,
+		Patterns.MockFileSystemFilesOptionsConstructor => UsingChange.Swap,
+		Patterns.MockFileSystemAddDrive => UsingChange.Swap,
+		Patterns.MockFileSystemAddFilesFromEmbeddedNamespace => UsingChange.Ensure,
+		_ => UsingChange.None,
+	};
+
+	/// <summary>
+	///     Whether a pattern's pure rewriter requires a <see cref="SemanticModel" />.
+	///     Used by the fix-all loop to avoid an O(N) per-iteration document round-trip
+	///     when the rewrite is purely syntactic — most patterns fall in that bucket.
+	/// </summary>
+	internal static bool PatternNeedsSemanticModel(string pattern) => pattern
+		is Patterns.AccessorAddFile
+		or Patterns.MockFileSystemFilesConstructor
+		or Patterns.MockFileSystemFilesOptionsConstructor
+		or Patterns.MockFileSystemAddFilesFromEmbeddedNamespace;
+
+	/// <summary>
+	///     Applies a using-directive change to the compilation unit. Called once at the end
+	///     of a fix pipeline so that overlapping using edits from multiple rewrites collapse
+	///     into a single deterministic change.
+	/// </summary>
+	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChange change)
+		=> change switch
+		{
+			UsingChange.Swap => SwapToTestablyUsing(cu),
+			UsingChange.Ensure => EnsureTestablyUsing(cu),
+			_ => cu,
+		};
+
+	/// <summary>
+	///     Single-diagnostic entry point used by every per-pattern CodeAction. Re-runs the
+	///     analyzer to discover all sibling diagnostics in the same document, then routes
+	///     through <see cref="SystemIOAbstractionsFixAllProvider.MigrateDocumentAsync" />
+	///     so one click in the IDE migrates the whole file at once. This mirrors
+	///     Mockolate's per-diagnostic Fix behavior and is the only way to keep the file
+	///     compilable after the fix — a per-diagnostic constructor fix that only swaps
+	///     the using leaves dependent <c>AddFile</c> / accessor calls bound to a Testably
+	///     type that has no matching surface, producing non-compiling code that the
+	///     analyzer can no longer flag.
+	/// </summary>
+	internal static async Task<Document> ApplySinglePatternAsync(
+		Document document,
+		Diagnostic diagnostic,
+		string pattern,
+		CancellationToken cancellationToken)
+	{
+		ImmutableArray<Diagnostic> siblings = await GetSiblingDiagnosticsAsync(document, cancellationToken)
+			.ConfigureAwait(false);
+		if (siblings.IsEmpty)
+		{
+			// Analyzer-run failed (no Compilation available, etc.). Fall back to a
+			// single-diagnostic apply so the user still gets some migration progress.
+			return await ApplyOnePatternAsync(document, diagnostic, pattern, cancellationToken)
+				.ConfigureAwait(false);
+		}
+
+		return await SystemIOAbstractionsFixAllProvider
+			.MigrateDocumentAsync(document, siblings, cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	///     Re-runs <see cref="SystemIOAbstractionsAnalyzer" /> against the document's
+	///     compilation and returns every TestablyM001 diagnostic whose source tree matches
+	///     <paramref name="document" />. Returns an empty array if the analyzer cannot be
+	///     run (no compilation, cancelled, etc.) — callers fall back to single-diagnostic
+	///     application in that case.
+	/// </summary>
+	private static async Task<ImmutableArray<Diagnostic>> GetSiblingDiagnosticsAsync(
+		Document document, CancellationToken cancellationToken)
+	{
+		Compilation? compilation = await document.Project
+			.GetCompilationAsync(cancellationToken).ConfigureAwait(false);
+		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+		if (compilation is null || tree is null)
+		{
+			return ImmutableArray<Diagnostic>.Empty;
+		}
+
+		CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
+			ImmutableArray.Create<DiagnosticAnalyzer>(new SystemIOAbstractionsAnalyzer()),
+			document.Project.AnalyzerOptions);
+		ImmutableArray<Diagnostic> all = await compilationWithAnalyzers
+			.GetAnalyzerDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
+
+		ImmutableArray<Diagnostic>.Builder result = ImmutableArray.CreateBuilder<Diagnostic>();
+		foreach (Diagnostic d in all)
+		{
+			if (d.Id == Rules.SystemIOAbstractionsRule.Id && d.Location.SourceTree == tree)
+			{
+				result.Add(d);
+			}
+		}
+
+		return result.ToImmutable();
+	}
+
+	/// <summary>
+	///     Fallback single-diagnostic apply used when the analyzer can't be re-run to find
+	///     siblings. Preserves the original per-diagnostic semantics (load document state,
+	///     dispatch one pattern, apply using-directive change).
+	/// </summary>
+	private static async Task<Document> ApplyOnePatternAsync(
+		Document document,
+		Diagnostic diagnostic,
+		string pattern,
+		CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+		if (root is not CompilationUnitSyntax cu)
+		{
+			return document;
+		}
+
+		SyntaxNode? target = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+		if (target is null)
+		{
+			return document;
+		}
+
+		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+
+		CompilationUnitSyntax? rewritten = DispatchPure(pattern, cu, target, semanticModel, cancellationToken);
+		if (rewritten is null)
+		{
+			return document;
+		}
+
+		rewritten = ApplyUsingChange(rewritten, GetUsingChange(pattern));
+		return document.WithSyntaxRoot(rewritten);
+	}
+
+	/// <summary>
+	///     Pure pattern dispatch. Each case forwards to a pure rewriter that takes a
+	///     <see cref="CompilationUnitSyntax" /> plus the diagnostic's target node and
+	///     returns a new compilation unit (or <see langword="null" /> if the rewrite is not
+	///     applicable). No I/O, no using-swap — those belong to the caller.
+	/// </summary>
+	internal static CompilationUnitSyntax? DispatchPure(
+		string pattern,
+		CompilationUnitSyntax cu,
+		SyntaxNode target,
+		SemanticModel? semanticModel,
+		CancellationToken cancellationToken)
+		=> pattern switch
+		{
+			Patterns.MockFileSystemDefaultConstructor => ApplyDefaultCtorPure(cu, target),
+			Patterns.MockFileSystemOptionsConstructor => ApplyOptionsCtorPure(cu, target),
+			Patterns.AccessorAddDirectory
+				or Patterns.AccessorRemoveFile
+				or Patterns.AccessorMoveDirectory
+				or Patterns.AccessorFileExists
+				or Patterns.AccessorAddEmptyFile
+				=> ApplyAccessorMethodPure(cu, target, pattern),
+			Patterns.AccessorAddFile when semanticModel is not null
+				=> ApplyAddFilePure(cu, target, semanticModel, cancellationToken),
+			Patterns.MockFileSystemFilesConstructor or Patterns.MockFileSystemFilesOptionsConstructor
+					when semanticModel is not null
+				=> ApplyFilesCtorPure(cu, target, semanticModel, pattern, cancellationToken),
+			Patterns.MockFileDataPropertyRead => ApplyPropertyReadPure(cu, target),
+			Patterns.MockFileDataPropertyWrite => ApplyPropertyWritePure(cu, target),
+			Patterns.MockFileSystemAddDrive => ApplyAddDrivePure(cu, target),
+			Patterns.MockFileSystemAddFilesFromEmbeddedNamespace when semanticModel is not null
+				=> ApplyAddFilesFromEmbeddedNamespacePure(cu, target, semanticModel, cancellationToken),
+			_ => null,
+		};
 
 	// ── Shared: using-directive swap ─────────────────────────────────────────
 
