@@ -7,7 +7,7 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// <summary>MockFileSystem constructor patterns flagged by the migration analyzer.</summary>
 public class ConstructorTests
 {
-	[Fact]
+	[Test]
 	public async Task FilesConstructor_SeedsDictionaryEntries()
 	{
 		MockFileSystem fs = new(new Dictionary<string, MockFileData>
@@ -18,7 +18,7 @@ public class ConstructorTests
 		await That(fs.File.ReadAllText("/etc/hosts")).IsEqualTo("127.0.0.1 localhost");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FilesConstructorWithCurrentDirectory_SeedsAndSetsCwd()
 	{
 		MockFileSystem fs = new(new Dictionary<string, MockFileData>
@@ -30,7 +30,7 @@ public class ConstructorTests
 		await That(fs.File.ReadAllText("/etc/hosts")).IsEqualTo("127.0.0.1 localhost");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FilesOptionsConstructor_FoldsOptionsAndExpandsEntries()
 	{
 		MockFileSystem fs = new(new Dictionary<string, MockFileData>
@@ -46,7 +46,7 @@ public class ConstructorTests
 		await That(fs.File.ReadAllText("/etc/utf8", Encoding.UTF8)).IsEqualTo("encoded");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OptionsConstructor_AppliesCurrentDirectoryFromOptions()
 	{
 		IFileSystem fs = new MockFileSystem(new MockFileSystemOptions { CurrentDirectory = "/work" });
@@ -54,7 +54,7 @@ public class ConstructorTests
 		await That(fs.Directory.GetCurrentDirectory()).IsEqualTo("/work");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Parameterless_CreatesEmptyFileSystem()
 	{
 		MockFileSystem fs = new();

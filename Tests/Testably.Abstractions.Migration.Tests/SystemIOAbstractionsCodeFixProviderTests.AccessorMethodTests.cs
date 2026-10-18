@@ -10,7 +10,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 {
 	public sealed class AccessorMethodTests
 	{
-		[Fact]
+		[Test]
 		public async Task AccessorAddDirectory_ShouldRewriteToDirectoryCreateDirectory()
 		{
 			const string source = """
@@ -37,7 +37,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddDirectory_InterfaceTypedReceiver_HasNoFix()
 		{
 			// The rewrite would emit `accessor.Directory.CreateDirectory(...)`, but
@@ -57,7 +57,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorRemoveFile_ShouldRewriteToFileDelete_AndDropVerifyAccess()
 		{
 			const string source = """
@@ -84,7 +84,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorMoveDirectory_ShouldRewriteToDirectoryMove()
 		{
 			const string source = """
@@ -111,7 +111,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorMoveDirectory_WithNamedArgs_ShouldStripNameColons()
 		{
 			// TestableIO uses sourcePath/destPath; Directory.Move uses sourceDirName/destDirName.
@@ -142,7 +142,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorFileExists_ShouldRewriteToFileExists()
 		{
 			const string source = """
@@ -169,7 +169,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddEmptyFile_ShouldRewriteToFileCreateDispose()
 		{
 			const string source = """
@@ -196,7 +196,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_TextContent_ShouldRewriteToFileWriteAllText()
 		{
 			const string source = """
@@ -225,7 +225,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_TextContentWithEncoding_ShouldRewriteToFileWriteAllText()
 		{
 			const string source = """
@@ -256,7 +256,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_ByteContent_ShouldRewriteToFileWriteAllBytes()
 		{
 			const string source = """
@@ -285,7 +285,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_WithAttributesInitializer_ShouldExpandToWriteAndSetAttributes()
 		{
 			const string source = """
@@ -321,7 +321,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_WithUnsupportedInitializerProperty_HasNoFix()
 		{
 			// LastWriteTime in object initializers is deferred (DateTime vs DateTimeOffset).
@@ -346,7 +346,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_WithInitializer_NotInBlock_HasNoFix()
 		{
 			// Expression-bodied member: there is no statement block to host the follow-up
@@ -368,7 +368,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AccessorAddFile_NonLiteralMockFileData_HasNoFix()
 		{
 			const string source = """
@@ -387,7 +387,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_EmptyInitializer_ShouldRewriteToWithDrive()
 		{
 			// `new MockDriveData()` with no initializer has nothing to chain — the
@@ -417,7 +417,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_TotalSizeOnly_ShouldRewriteToWithDriveLambda()
 		{
 			const string source = """
@@ -446,7 +446,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_AllMappableProperties_ShouldChainSetters()
 		{
 			// Initializer order is preserved in the chained call so the user can verify
@@ -489,7 +489,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_TargetTypedNew_ShouldRewriteToWithDrive()
 		{
 			// `new() { ... }` resolves to MockDriveData via the AddDrive parameter type;
@@ -520,7 +520,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_ShadowingDriveIdentifier_PicksFreshLambdaParameter()
 		{
 			// The initializer RHS references an outer `d`; the rewrite must not let the
@@ -552,7 +552,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_InterfaceTypedReceiver_HasNoFix()
 		{
 			// The rewrite emits `<receiver>.WithDrive(...)`. IMockFileDataAccessor has no
@@ -574,7 +574,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_NonLiteralMockDriveData_HasNoFix()
 		{
 			// A captured MockDriveData reference (parameter, local, field, etc.) has no
@@ -595,7 +595,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_UnsupportedInitializerProperty_HasNoFix()
 		{
 			// AvailableFreeSpace has no IStorageDrive setter — manual review required.
@@ -615,7 +615,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_CopyConstructor_HasNoFix()
 		{
 			// `new MockDriveData(template)` has no 1:1 mapping to a single WithDrive
@@ -636,7 +636,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_FullyQualifiedReceiverDeclaration_HasNoFix()
 		{
 			// The parameter declaration uses the fully-qualified type name, so the
@@ -656,7 +656,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_LocalVariableReceiver_ShouldRewriteToWithDrive()
 		{
 			// Local-variable receiver: declarator syntax is VariableDeclaratorSyntax.
@@ -694,7 +694,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_PropertyReceiver_ShouldRewriteToWithDrive()
 		{
 			// Property-typed receiver: declarator syntax is PropertyDeclarationSyntax.
@@ -726,7 +726,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_MethodReturnReceiver_ShouldRewriteToWithDrive()
 		{
 			// Method-return-typed receiver: declarator syntax is MethodDeclarationSyntax.
@@ -758,7 +758,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_NullablePropertyReceiver_ShouldRewriteToWithDrive()
 		{
 			// Nullable-annotated property type: PropertyDeclarationSyntax.Type is a
@@ -792,7 +792,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddDrive_AliasQualifiedReceiverDeclaration_HasNoFix()
 		{
 			// The parameter declaration is alias-qualified (`TestableIo.MockFileSystem`).
@@ -815,11 +815,11 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Theory]
-		[InlineData("AllPaths")]
-		[InlineData("AllFiles")]
-		[InlineData("AllDirectories")]
-		[InlineData("AllDrives")]
+		[Test]
+		[Arguments("AllPaths")]
+		[Arguments("AllFiles")]
+		[Arguments("AllDirectories")]
+		[Arguments("AllDrives")]
 		public async Task EnumerationProperty_HasNoFix(string property)
 		{
 			// Testably has no 1:1 equivalent for the IMockFileDataAccessor enumeration
@@ -842,11 +842,11 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Theory]
-		[InlineData("() => System.DateTime.UnixEpoch")]
-		[InlineData("() => System.DateTime.Now")]
-		[InlineData("() => System.DateTime.UtcNow")]
-		[InlineData("dateTimeProvider")]
+		[Test]
+		[Arguments("() => System.DateTime.UnixEpoch")]
+		[Arguments("() => System.DateTime.Now")]
+		[Arguments("() => System.DateTime.UtcNow")]
+		[Arguments("dateTimeProvider")]
 		public async Task MockTime_HasNoFix(string argument)
 		{
 			// Phase 5.3 ships MockTime as manual review only. TestableIO calls the
@@ -875,7 +875,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFileFromEmbeddedResource_HasNoFix()
 		{
 			// Testably exposes only a bulk InitializeEmbeddedResourcesFromAssembly with no
@@ -900,7 +900,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_NonResolvableAssembly_HasNoFix()
 		{
 			// When the assembly arg is an opaque parameter, the analyzer cannot identify
@@ -923,7 +923,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_TypeOfAssembly_RewritesToInitializeEmbeddedResources()
 		{
 			// When the assembly arg is `typeof(X).Assembly` and the literal starts with
@@ -960,7 +960,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_NestedNamespace_PreservesPath()
 		{
 			// Multi-segment relative path: dots are converted to forward slashes so
@@ -992,7 +992,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_LiteralEqualsAssemblyName_OmitsRelativePath()
 		{
 			// Literal == assembly name (or assembly-name + ".") means "all resources" in
@@ -1025,7 +1025,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_GetExecutingAssembly_RewritesToInitializeEmbeddedResources()
 		{
 			// `Assembly.GetExecutingAssembly()` resolves to the compilation's own
@@ -1060,7 +1060,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_LiteralPrefixMismatch_HasNoFix()
 		{
 			// Literal does not start with the resolved assembly name. The user might be
@@ -1082,7 +1082,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_NonLiteralPath_HasNoFix()
 		{
 			// The third argument is not a string literal — could be a const reference,
@@ -1104,7 +1104,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_InterfaceTypedReceiver_HasNoFix()
 		{
 			// The Testably target is an extension method on `IFileSystem`. The TestableIO

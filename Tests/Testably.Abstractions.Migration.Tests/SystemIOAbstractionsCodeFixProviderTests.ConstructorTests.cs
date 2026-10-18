@@ -10,7 +10,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 {
 	public sealed class ConstructorTests
 	{
-		[Fact]
+		[Test]
 		public async Task ParameterlessConstructor_ShouldSwapUsingDirective()
 		{
 			const string source = """
@@ -39,7 +39,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task ParameterlessConstructor_TargetTypedNew_ShouldSwapUsingDirective()
 		{
 			const string source = """
@@ -74,7 +74,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task ParameterlessConstructor_AliasQualifiedType_HasNoFix()
 		{
 			// `using TestableIo = …;` keeps the type alias-qualified. The using-only fix
@@ -95,7 +95,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task ParameterlessConstructor_TargetTypedNewWithQualifiedTarget_HasNoFix()
 		{
 			// `new()` is target-typed; the qualified LHS keeps the construction bound to
@@ -117,7 +117,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task OptionsConstructor_EmptyInitializer_ShouldRewriteToParameterless()
 		{
 			const string source = """
@@ -148,7 +148,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task OptionsConstructor_CurrentDirectory_ShouldRewriteToUseCurrentDirectoryLambda()
 		{
 			const string source = """
@@ -179,7 +179,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task OptionsConstructor_CurrentDirectoryReferencesIdentifierNamed_o_ShouldPickFreshLambdaParameter()
 		{
 			// The default lambda parameter name `o` would shadow the local `o`, rewriting
@@ -218,7 +218,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task OptionsConstructor_UnsupportedProperty_HasNoFix()
 		{
 			// The analyzer still flags the call site, but no code action is registered
@@ -241,7 +241,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_LocalDecl_ShouldExpandToParameterlessCtorAndWrites()
 		{
 			const string source = """
@@ -280,7 +280,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_WithCurrentDirectoryString_ShouldFoldIntoOptionsLambda()
 		{
 			const string source = """
@@ -319,7 +319,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_DictionaryEntryWithAttributes_ExpandsSetAttributesFollowUp()
 		{
 			const string source = """
@@ -361,7 +361,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_ExpressionBodyContext_HasNoFix()
 		{
 			// The construction is not in a local-declaration statement, so the expansion
@@ -387,7 +387,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_NonRootParent_EmitsCreateDirectoryFollowUp()
 		{
 			// The `Dictionary<string, MockFileData>` constructor auto-creates each
@@ -430,7 +430,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_SharedParent_EmitsCreateDirectoryOnce()
 		{
 			// Two entries share the same parent — only one CreateDirectory is emitted.
@@ -473,7 +473,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesConstructor_NonLiteralKey_SkipsCreateDirectory()
 		{
 			// Non-literal keys can't be resolved at fix time. The fixer emits the
@@ -514,7 +514,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task FilesOptionsConstructor_ShouldFoldOptionsAndExpandEntries()
 		{
 			const string source = """
@@ -555,7 +555,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileSystemSubclass_HasNoFix()
 		{
 			// User-defined MockFileSystem subclasses don't have a Testably equivalent —

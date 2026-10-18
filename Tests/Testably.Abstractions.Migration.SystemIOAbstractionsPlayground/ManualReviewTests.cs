@@ -16,7 +16,7 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// </summary>
 public class ManualReviewTests
 {
-	[Fact]
+	[Test]
 	public async Task MockFileData_AllowedFileShare_RoundTripsAssignedValue()
 	{
 		MockFileData data = new("hello") { AllowedFileShare = FileShare.Read };
@@ -24,12 +24,12 @@ public class ManualReviewTests
 		await That(data.AllowedFileShare).IsEqualTo(FileShare.Read);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileData_AccessControl_RoundTripsAssignedValue()
 	{
 		if (!OperatingSystem.IsWindows())
 		{
-			Assert.Skip("FileSecurity is Windows-only.");
+			TUnit.Core.Skip.Test("FileSecurity is Windows-only.");
 		}
 
 #pragma warning disable CA1416 // Validate platform compatibility
@@ -40,7 +40,7 @@ public class ManualReviewTests
 #pragma warning restore CA1416
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileData_UnixMode_RoundTripsAssignedValue()
 	{
 		MockFileData data = new("hello") { UnixMode = UnixFileMode.UserRead | UnixFileMode.UserWrite };
@@ -48,7 +48,7 @@ public class ManualReviewTests
 		await That(data.UnixMode).IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileVersionInfo_Constructor_ExposesMetadata()
 	{
 		MockFileVersionInfo info = new("/a.dll", fileVersion: "1.2.3", productName: "Sample");
@@ -58,7 +58,7 @@ public class ManualReviewTests
 		await That(info.ProductName).IsEqualTo("Sample");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystemSubclass_BehavesAsMockFileSystem()
 	{
 		MyMockFs fs = new();
@@ -67,7 +67,7 @@ public class ManualReviewTests
 		await That(fs.File.ReadAllText("/a")).IsEqualTo("hello");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataSubclass_BehavesAsMockFileData()
 	{
 		MyMockFileData data = new();
@@ -75,7 +75,7 @@ public class ManualReviewTests
 		await That(data.TextContents).IsEqualTo("hello");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileData_CopyConstructor_ClonesTextContents()
 	{
 		MockFileData template = new("hello");
@@ -84,7 +84,7 @@ public class ManualReviewTests
 		await That(clone.TextContents).IsEqualTo("hello");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystem_MockTime_ReturnsSelfForFluentChaining()
 	{
 		// TestableIO calls the supplied delegate every time it needs a timestamp.
@@ -99,7 +99,7 @@ public class ManualReviewTests
 		await That(chained).IsSameAs(fs);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystem_AddFileFromEmbeddedResource_MaterializesEmbeddedFile()
 	{
 		// TestableIO matches the resource name literally; Testably exposes only a
@@ -115,7 +115,7 @@ public class ManualReviewTests
 			.IsEqualTo("embedded-resource-content");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystem_AddFilesFromEmbeddedNamespace_MaterializesMatchingFiles()
 	{
 		// TestableIO uses a literal StartsWith on the assembly-qualified resource name,

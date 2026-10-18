@@ -10,7 +10,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 {
 	public sealed class MockFileDataTests
 	{
-		[Fact]
+		[Test]
 		public async Task MockFileDataRead_TextContents_ShouldRewriteToFileReadAllText()
 		{
 			const string source = """
@@ -37,7 +37,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataRead_Contents_ShouldRewriteToFileReadAllBytes()
 		{
 			const string source = """
@@ -64,7 +64,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataRead_Attributes_ShouldRewriteToFileGetAttributes()
 		{
 			const string source = """
@@ -93,10 +93,10 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Theory]
-		[InlineData("CreationTime", "GetCreationTimeUtc")]
-		[InlineData("LastAccessTime", "GetLastAccessTimeUtc")]
-		[InlineData("LastWriteTime", "GetLastWriteTimeUtc")]
+		[Test]
+		[Arguments("CreationTime", "GetCreationTimeUtc")]
+		[Arguments("LastAccessTime", "GetLastAccessTimeUtc")]
+		[Arguments("LastWriteTime", "GetLastWriteTimeUtc")]
 		public async Task MockFileDataRead_TimeProperty_ShouldRewriteToFileGetTimeUtc(
 			string property, string newMethod)
 		{
@@ -126,7 +126,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataRead_CapturedReference_HasNoFix()
 		{
 			// `data` is a captured MockFileData reference, not a one-shot `GetFile(p).Prop`.
@@ -152,10 +152,10 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Theory]
-		[InlineData("FileShare", "AllowedFileShare")]
-		[InlineData("System.Security.AccessControl.FileSecurity", "AccessControl")]
-		[InlineData("System.IO.UnixFileMode", "UnixMode")]
+		[Test]
+		[Arguments("FileShare", "AllowedFileShare")]
+		[Arguments("System.Security.AccessControl.FileSecurity", "AccessControl")]
+		[Arguments("System.IO.UnixFileMode", "UnixMode")]
 		public async Task MockFileDataManualReviewProperty_HasNoFix(string returnType, string property)
 		{
 			// AccessControl/AllowedFileShare/UnixMode have no Testably equivalent.
@@ -177,7 +177,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataManualReviewProperty_PlainWrite_HasNoFix()
 		{
 			// Write-side counterpart: AllowedFileShare/AccessControl/UnixMode writes
@@ -201,7 +201,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileVersionInfoConstructor_HasNoFix()
 		{
 			// MockFileVersionInfo has no Testably equivalent. The analyzer flags every
@@ -222,7 +222,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataWrite_TextContents_ShouldRewriteToFileWriteAllText()
 		{
 			const string source = """
@@ -255,7 +255,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataWrite_Attributes_ShouldRewriteToFileSetAttributes()
 		{
 			const string source = """
@@ -290,7 +290,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataWrite_CapturedReference_HasNoFix()
 		{
 			const string source = """
@@ -313,7 +313,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataWrite_TimeProperty_HasNoFix()
 		{
 			// Time-property writes need a DateTimeOffset → DateTime conversion the rewrite
@@ -337,7 +337,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataAccess_CompoundAssignment_HasNoFix()
 		{
 			// `|=` is a compound assignment. The read-side rewrite would put a getter call
@@ -362,7 +362,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataSubclass_HasNoFix()
 		{
 			// A user-defined MockFileData subclass has no Testably equivalent. The analyzer
@@ -383,7 +383,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				source);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MockFileDataCopyConstructor_HasNoFix()
 		{
 			// MockFileData copy ctor (`new MockFileData(template)`) clones template state.
