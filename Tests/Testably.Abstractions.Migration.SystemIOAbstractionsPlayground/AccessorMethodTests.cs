@@ -7,7 +7,7 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// <summary>1:1 accessor methods on MockFileSystem (IMockFileDataAccessor surface).</summary>
 public class AccessorMethodTests
 {
-	[Fact]
+	[Test]
 	public async Task AddDirectory_CreatesDirectory()
 	{
 		MockFileSystem fs = new();
@@ -16,7 +16,7 @@ public class AccessorMethodTests
 		await That(fs.Directory.Exists("/a")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddEmptyFile_CreatesZeroByteFile()
 	{
 		MockFileSystem fs = new();
@@ -26,7 +26,7 @@ public class AccessorMethodTests
 		await That(fs.File.ReadAllBytes("/a/empty.txt")).IsEmpty();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFile_TextContent_StoresText()
 	{
 		MockFileSystem fs = new();
@@ -35,7 +35,7 @@ public class AccessorMethodTests
 		await That(fs.File.ReadAllText("/a/text.txt")).IsEqualTo("hello");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFile_TextContentWithEncoding_StoresEncodedText()
 	{
 		MockFileSystem fs = new();
@@ -44,7 +44,7 @@ public class AccessorMethodTests
 		await That(fs.File.ReadAllText("/a/utf8.txt", Encoding.UTF8)).IsEqualTo("héllo");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFile_ByteContent_StoresBytes()
 	{
 		MockFileSystem fs = new();
@@ -53,7 +53,7 @@ public class AccessorMethodTests
 		await That(fs.File.ReadAllBytes("/a/bytes.bin")).IsEqualTo(new byte[] { 0x01, 0x02 });
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFile_WithAttributesInitializer_AppliesAttributes()
 	{
 		MockFileSystem fs = new();
@@ -63,7 +63,7 @@ public class AccessorMethodTests
 		await That(fs.File.GetAttributes("/a")).IsEqualTo(FileAttributes.ReadOnly);
 	}
 
-	[Fact]
+	[Test]
 	public async Task FileExists_ReturnsTrueWhenFileWasAdded()
 	{
 		MockFileSystem fs = new();
@@ -72,7 +72,7 @@ public class AccessorMethodTests
 		await That(fs.FileExists("/a")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task MoveDirectory_MovesContents()
 	{
 		MockFileSystem fs = new();
@@ -83,7 +83,7 @@ public class AccessorMethodTests
 		await That(fs.FileExists("/a/text.txt")).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task MoveDirectory_WithNamedArgs_MovesContents()
 	{
 		MockFileSystem fs = new();
@@ -93,7 +93,7 @@ public class AccessorMethodTests
 		await That(fs.FileExists("/b/text.txt")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RemoveFile_DeletesFile()
 	{
 		MockFileSystem fs = new();
@@ -103,7 +103,7 @@ public class AccessorMethodTests
 		await That(fs.FileExists("/a")).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RemoveFile_WithVerifyAccess_DeletesFile()
 	{
 		MockFileSystem fs = new();
@@ -113,7 +113,7 @@ public class AccessorMethodTests
 		await That(fs.FileExists("/a")).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddDrive_EmptyData_RegistersDrive()
 	{
 		MockFileSystem fs = new();
@@ -123,7 +123,7 @@ public class AccessorMethodTests
 		await That(drive).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddDrive_WithTotalSize_RegistersDriveWithSize()
 	{
 		const long totalSize = 1024L * 1024L;
@@ -135,7 +135,7 @@ public class AccessorMethodTests
 		await That(drive!.TotalSize).IsEqualTo(totalSize);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AllFiles_EnumeratesEveryAddedFile()
 	{
 		// Phase 5.1 manual-review fixture: Testably has no AllFiles equivalent. The
@@ -158,7 +158,7 @@ public class AccessorMethodTests
 		await That(sawTwo).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AllDirectories_EnumeratesEveryAddedDirectory()
 	{
 		MockFileSystem fs = new();

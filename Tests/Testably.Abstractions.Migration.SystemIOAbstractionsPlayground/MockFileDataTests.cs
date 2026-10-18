@@ -6,7 +6,7 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// <summary>MockFileData property reads and writes against one-shot GetFile(path).Prop chains.</summary>
 public class MockFileDataTests
 {
-	[Fact]
+	[Test]
 	public async Task PropertyRead_Attributes_ReturnsStoredAttributes()
 	{
 		MockFileSystem fs = new();
@@ -17,7 +17,7 @@ public class MockFileDataTests
 		await That(attrs).IsEqualTo(FileAttributes.ReadOnly);
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyRead_Contents_ReturnsStoredBytes()
 	{
 		MockFileSystem fs = new();
@@ -28,7 +28,7 @@ public class MockFileDataTests
 		await That(bytes).IsEqualTo(new byte[] { 0x01, 0x02 });
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyRead_CreationTime_ReturnsAssignableTime()
 	{
 		MockFileSystem fs = new();
@@ -39,7 +39,7 @@ public class MockFileDataTests
 		await That(creationTime).IsNotEqualTo(default(DateTimeOffset));
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyRead_LastAccessTime_ReturnsAssignableTime()
 	{
 		MockFileSystem fs = new();
@@ -50,7 +50,7 @@ public class MockFileDataTests
 		await That(accessTime).IsNotEqualTo(default(DateTimeOffset));
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyRead_LastWriteTime_ReturnsAssignableTime()
 	{
 		MockFileSystem fs = new();
@@ -61,7 +61,7 @@ public class MockFileDataTests
 		await That(writeTime).IsNotEqualTo(default(DateTimeOffset));
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyRead_TextContents_ReturnsStoredText()
 	{
 		MockFileSystem fs = new();
@@ -72,7 +72,7 @@ public class MockFileDataTests
 		await That(text).IsEqualTo("hello");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyWrite_Attributes_SetsAttributes()
 	{
 		MockFileSystem fs = new();
@@ -83,7 +83,7 @@ public class MockFileDataTests
 		await That(fs.File.GetAttributes("/a")).IsEqualTo(FileAttributes.ReadOnly);
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyWrite_TextContents_OverwritesStoredText()
 	{
 		MockFileSystem fs = new();
@@ -94,7 +94,7 @@ public class MockFileDataTests
 		await That(fs.File.ReadAllText("/a")).IsEqualTo("world");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CapturedReference_ReadsAndWritesViaLocal()
 	{
 		// Phase 4c manual-review fixture: GetFile result is captured into a local before

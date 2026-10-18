@@ -19,7 +19,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 	/// </summary>
 	public sealed class FixAllTests
 	{
-		[Fact]
+		[Test]
 		public async Task MultipleDefaultConstructors_InSameDocument_ShouldAllMigrate()
 		{
 			const string source = """
@@ -54,7 +54,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task ConstructorPlusAccessorCalls_OnSameMockFileSystem_ShouldAllMigrate()
 		{
 			const string source = """
@@ -95,7 +95,7 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				fixedSource);
 		}
 
-		[Fact]
+		[Test]
 		public async Task MixedPatterns_AcrossMultipleMethods_ShouldAllMigrateInOnePass()
 		{
 			const string source = """

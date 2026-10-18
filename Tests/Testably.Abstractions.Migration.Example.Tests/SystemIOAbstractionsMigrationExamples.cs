@@ -13,7 +13,7 @@ namespace Testably.Abstractions.Migration.Example.Tests;
 /// </summary>
 public class SystemIOAbstractionsMigrationExamples
 {
-	[Fact]
+	[Test]
 	public async Task BeforeMigration()
 	{
 #pragma warning disable TestablyM001
@@ -66,7 +66,7 @@ public class SystemIOAbstractionsMigrationExamples
 		await That(attributes).IsEqualTo(FileAttributes.ReadOnly);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExpectedMigrationResult()
 	{
 		// Parameterless constructor.

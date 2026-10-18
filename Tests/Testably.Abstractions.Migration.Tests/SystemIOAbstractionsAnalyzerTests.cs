@@ -7,7 +7,7 @@ namespace Testably.Abstractions.Migration.Tests;
 
 public sealed class SystemIOAbstractionsAnalyzerTests
 {
-	[Fact]
+	[Test]
 	public async Task ParameterlessConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -25,7 +25,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task FilesConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -45,7 +45,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task OptionsConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -64,7 +64,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task FilesOptionsConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -84,12 +84,12 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Theory]
-	[InlineData("AddDirectory(\"/foo\")")]
-	[InlineData("AddEmptyFile(\"/foo\")")]
-	[InlineData("RemoveFile(\"/foo\")")]
-	[InlineData("MoveDirectory(\"/foo\", \"/bar\")")]
-	[InlineData("FileExists(\"/foo\")")]
+	[Test]
+	[Arguments("AddDirectory(\"/foo\")")]
+	[Arguments("AddEmptyFile(\"/foo\")")]
+	[Arguments("RemoveFile(\"/foo\")")]
+	[Arguments("MoveDirectory(\"/foo\", \"/bar\")")]
+	[Arguments("FileExists(\"/foo\")")]
 	public async Task AccessorMethods_ShouldBeFlagged(string invocation)
 	{
 		string source = $$"""
@@ -106,7 +106,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFile_ShouldBeFlagged()
 	{
 		const string source = """
@@ -124,7 +124,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddDrive_ShouldBeFlagged()
 	{
 		const string source = """
@@ -142,7 +142,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockTime_ShouldBeFlagged()
 	{
 		const string source = """
@@ -161,7 +161,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFileFromEmbeddedResource_ShouldBeFlagged()
 	{
 		const string source = """
@@ -180,7 +180,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddFilesFromEmbeddedNamespace_ShouldBeFlagged()
 	{
 		const string source = """
@@ -199,11 +199,11 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Theory]
-	[InlineData("AllPaths")]
-	[InlineData("AllFiles")]
-	[InlineData("AllDirectories")]
-	[InlineData("AllDrives")]
+	[Test]
+	[Arguments("AllPaths")]
+	[Arguments("AllFiles")]
+	[Arguments("AllDirectories")]
+	[Arguments("AllDrives")]
 	public async Task EnumerationProperty_OnMockFileSystem_ShouldBeFlagged(string property)
 	{
 		string source = $$"""
@@ -221,7 +221,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnumerationProperty_OnAccessorInterface_ShouldBeFlagged()
 	{
 		// AllFiles is declared on IMockFileDataAccessor — when the receiver is the
@@ -242,11 +242,11 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Theory]
-	[InlineData("TextContents")]
-	[InlineData("Contents")]
-	[InlineData("Attributes")]
-	[InlineData("LastWriteTime")]
+	[Test]
+	[Arguments("TextContents")]
+	[Arguments("Contents")]
+	[Arguments("Attributes")]
+	[Arguments("LastWriteTime")]
 	public async Task MockFileDataPropertyRead_ShouldBeFlagged(string property)
 	{
 		string source = $$"""
@@ -263,10 +263,10 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Theory]
-	[InlineData("AccessControl")]
-	[InlineData("AllowedFileShare")]
-	[InlineData("UnixMode")]
+	[Test]
+	[Arguments("AccessControl")]
+	[Arguments("AllowedFileShare")]
+	[Arguments("UnixMode")]
 	public async Task MockFileDataManualReviewProperty_ShouldBeFlagged(string property)
 	{
 		string source = $$"""
@@ -283,7 +283,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataManualReviewProperty_PlainWrite_ShouldBeFlagged()
 	{
 		const string source = """
@@ -302,7 +302,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataManualReviewProperty_ObjectInitializerWrite_ShouldBeFlagged()
 	{
 		// The migratable property writes inside an object initializer are skipped to
@@ -330,7 +330,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileVersionInfoConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -347,7 +347,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystemSubclass_ShouldBeFlaggedAtClassDeclaration()
 	{
 		const string source = """
@@ -363,7 +363,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileSystemSubclass_Transitive_ShouldBeFlagged()
 	{
 		const string source = """
@@ -384,7 +384,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataSubclass_ShouldBeFlaggedAtClassDeclaration()
 	{
 		const string source = """
@@ -401,7 +401,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataCopyConstructor_ShouldBeFlagged()
 	{
 		const string source = """
@@ -418,7 +418,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataPropertyWrite_ShouldBeFlagged()
 	{
 		const string source = """
@@ -437,7 +437,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataCapturedReferenceRead_FromLocal_ShouldBeFlagged()
 	{
 		const string source = """
@@ -458,7 +458,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataCapturedReferenceWrite_FromLocal_ShouldBeFlagged()
 	{
 		const string source = """
@@ -480,7 +480,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataCapturedReferenceRead_FromParameter_ShouldBeFlagged()
 	{
 		const string source = """
@@ -497,7 +497,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task MockFileDataCapturedReferenceRead_FromField_ShouldBeFlagged()
 	{
 		const string source = """
@@ -516,7 +516,7 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WithoutTestingHelpersAssembly_ShouldDoNothing()
 	{
 		const string source = """

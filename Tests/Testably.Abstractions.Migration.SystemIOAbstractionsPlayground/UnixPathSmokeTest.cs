@@ -11,7 +11,7 @@ namespace Testably.Abstractions.Migration.SystemIOAbstractionsPlayground;
 /// </summary>
 public class UnixPathSmokeTest
 {
-	[Fact]
+	[Test]
 	public async Task RoundTrip_OnRootedUnixPath_ReturnsWrittenContents()
 	{
 		MockFileSystem fs = new();
