@@ -69,9 +69,8 @@ partial class Build
 			// with "file in use". Packing here with NoBuild after Compile sidesteps
 			// the race entirely: the slnx build has already produced every analyzer
 			// DLL the meta-package needs to bundle into analyzers/dotnet/cs/. Pack
-			// runs against the .slnx (not the csproj) so $(SolutionDir) resolves for
-			// the README pack target; only the meta-package is IsPackable=true so it
-			// is the only project actually packed.
+			// runs against the .slnx (not the csproj); only the meta-package is
+			// IsPackable=true so it is the only project actually packed.
 			DotNetPack(s => s
 				.SetProject(Solution.Path)
 				.SetConfiguration(Configuration)
