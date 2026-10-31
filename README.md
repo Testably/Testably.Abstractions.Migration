@@ -9,12 +9,12 @@ A Roslyn analyzer and code-fix provider that migrates
 [System.IO.Abstractions](https://github.com/TestableIO/System.IO.Abstractions) (`TestableIO`) usage of
 `MockFileSystem` and `MockFileData` to the
 [Testably.Abstractions](https://github.com/Testably/Testably.Abstractions) `MockFileSystem` API. Drop the
-package into a project that uses `System.IO.Abstractions.TestingHelpers` and the analyzer flags each
+package into a project that uses `TestableIO.System.IO.Abstractions.TestingHelpers` and the analyzer flags each
 construct it can migrate; the accompanying code fix rewrites the call site.
 
 ## Installation
 
-The migration package is a one-shot development tool — install it, migrate, then uninstall. It ships only
+The migration package is a one-shot development tool: install it, migrate, then uninstall. It ships only
 the analyzer and code fixer, not runtime code, and is marked as a `DevelopmentDependency` so it never
 flows transitively to consumers of your test project.
 
@@ -30,8 +30,8 @@ dotnet add package Testably.Abstractions.Migration
 ## Recommended workflow
 
 1. **Reference the target library.** Add `Testably.Abstractions.Testing` to the project you want to
-   migrate (see above). Existing `System.IO.Abstractions.TestingHelpers` usage keeps compiling
-   side-by-side.
+   migrate (see above). Existing `TestableIO.System.IO.Abstractions.TestingHelpers` usage keeps
+   compiling side-by-side.
 2. **Install the migration package.** Adds the analyzer. Every supported construct is reported as
    warning `TestablyM001`.
 3. **Apply the code fix.** Use your IDE (Visual Studio, Rider, VS Code with C# Dev Kit) to fix
@@ -39,12 +39,13 @@ dotnet add package Testably.Abstractions.Migration
 4. **Address manual-review diagnostics.** Some patterns have no safe automatic rewrite (see
    [Manual review](#manual-review)). The analyzer reports them so they are discoverable; you migrate
    each call site by hand.
-5. **Remove `System.IO.Abstractions.TestingHelpers`.** Once the analyzer is quiet, drop the dependency.
+5. **Remove `TestableIO.System.IO.Abstractions.TestingHelpers`.** Once the analyzer is quiet, drop the
+   dependency (or `System.IO.Abstractions.TestingHelpers`, the older package id that forwards to it).
 6. **Uninstall the migration package.** It has served its purpose and only adds analyzer overhead
    from here on.
 
 ```shell
-dotnet remove package System.IO.Abstractions.TestingHelpers
+dotnet remove package TestableIO.System.IO.Abstractions.TestingHelpers
 dotnet remove package Testably.Abstractions.Migration
 ```
 
@@ -52,7 +53,7 @@ dotnet remove package Testably.Abstractions.Migration
 
 The analyzer emits a single diagnostic id, `TestablyM001`. Each call site carries a `pattern` property
 in `Diagnostic.Properties` that tells the code-fix provider which rewrite to perform. Patterns without
-an automatic rewrite still get a `TestablyM001` warning so you can locate them — the code fix just
+an automatic rewrite still get a `TestablyM001` warning so you can locate them; the code fix just
 declines to register an action.
 
 | Diagnostic     | Source library         | Code fix title                                              |
