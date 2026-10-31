@@ -10,6 +10,9 @@
 			themselves so the dependency survives the migration package's removal.
 		-->
 		<DevelopmentDependency>true</DevelopmentDependency>
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+		<IncludeSymbols>false</IncludeSymbols>
 		<!--
 			Pack runs separately from build (see Pipeline/Build.Pack.cs). Adding
 			ProjectReference items to the analyzer projects from here was found to
