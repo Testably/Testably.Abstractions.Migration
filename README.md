@@ -99,10 +99,10 @@ analysis the analyzer does not perform. Address each one by hand.
 
 | Pattern                                              | Why manual                                                                                        |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `MockFileData.AccessControl`                         | Windows `FileSecurity` has no Testably equivalent.                                                |
-| `MockFileData.AllowedFileShare`                      | File-share locking has no Testably equivalent.                                                    |
-| `MockFileData.UnixMode`                              | Unix file permissions have no Testably equivalent.                                                |
-| `new MockFileVersionInfo(...)`                       | File-version metadata has no Testably equivalent.                                                 |
+| `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](https://docs.testably.org/Abstractions/companion-libraries/access-control); to deny access, register a strategy with [`WithAccessControlStrategy`](https://docs.testably.org/Abstractions/file-system/access-control). |
+| `MockFileData.AllowedFileShare`                      | Testably [honors the `FileShare`](https://docs.testably.org/Abstractions/file-system/safe-file-handles) a file was opened with; keep a stream with the restricted share open instead. |
+| `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](https://docs.testably.org/Abstractions/file-system/unix-file-mode). |
+| `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](https://docs.testably.org/Abstractions/file-system/file-version-info). |
 | Subclassing `MockFileSystem` / `MockFileData`        | Inheritance contract differs in Testably.                                                         |
 | `new MockFileData(MockFileData template)`            | Copy-clone semantics differ; no Testably equivalent.                                              |
 | Captured-reference `MockFileData` property access    | `var data = fs.GetFile(path); data.Prop = …` cannot be rewritten without local flow analysis.     |
