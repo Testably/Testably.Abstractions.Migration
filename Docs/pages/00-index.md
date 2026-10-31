@@ -1,10 +1,13 @@
 ---
-title: Migration analyzer
+sidebar_label: Migration analyzer
+description: A Roslyn analyzer and code fix that rewrites TestableIO MockFileSystem tests to the Testably.Abstractions MockFileSystem.
 ---
 
 import PackageInstall from '@site/src/components/PackageInstall';
 
-`Testably.Abstractions.Migration` is a Roslyn analyzer that automates the call-site rewrites described on the [migration overview](../). It flags every supported pattern (with code-fix support) and reports the rest so you can address them by hand.
+# Testably.Abstractions.Migration
+
+`Testably.Abstractions.Migration` is a Roslyn analyzer that automates the call-site rewrites from TestableIO to [Testably.Abstractions](/Abstractions) described on the [migration overview](../). It flags every supported pattern (with code-fix support) and reports the rest so you can address them by hand.
 
 ## Installation
 
@@ -74,10 +77,10 @@ These call sites are flagged with `TestablyM001` but have no automatic rewrite, 
 
 | Pattern                                              | Why manual                                                                                        |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](../../companion-libraries/access-control.mdx); to deny access, register a strategy with [`WithAccessControlStrategy`](../../file-system/access-control.mdx). |
-| `MockFileData.AllowedFileShare`                      | Testably [honors the `FileShare`](../../file-system/safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
-| `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](../../file-system/unix-file-mode.mdx). |
-| `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](../../file-system/file-version-info.mdx). |
+| `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](../../06-companion-libraries/02-access-control.mdx); to deny access, register a strategy with [`WithAccessControlStrategy`](../../03-file-system/07-access-control.mdx). |
+| `MockFileData.AllowedFileShare`                      | Testably [honors the `FileShare`](../../03-file-system/09-safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
+| `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](../../03-file-system/08-unix-file-mode.mdx). |
+| `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](../../03-file-system/11-file-version-info.mdx). |
 | Subclassing `MockFileSystem` / `MockFileData`        | Inheritance contract differs in Testably.                                                         |
 | `new MockFileData(MockFileData template)`            | Copy-clone semantics differ; no Testably equivalent.                                              |
 | Captured-reference `MockFileData` property access    | `var data = fs.GetFile(path); data.Prop = …` cannot be rewritten without local flow analysis.     |
@@ -91,13 +94,13 @@ If you choose not to migrate a particular call site, suppress `TestablyM001` per
 
 ```csharp
 #pragma warning disable TestablyM001
-var fs = new MockFileSystem();
+MockFileSystem fs = new MockFileSystem();
 #pragma warning restore TestablyM001
 ```
 
 or via an `.editorconfig` entry scoped to the file/folder:
 
-```ini
+```text title=".editorconfig"
 [**/Legacy/**.cs]
 dotnet_diagnostic.TestablyM001.severity = none
 ```
