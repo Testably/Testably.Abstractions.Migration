@@ -22,6 +22,7 @@ partial class Build
 				.AddOpenCoverPaths(TestResultsDirectory / "reports" / "OpenCover.xml")
 				.SetPullRequestOrBranchName(GitHubActions, GitVersion)
 				.SetVersion(GitVersion.SemVer)
+				.SetQualityGateWait(GitHubActions?.IsPullRequest == true)
 				.SetToken(SonarToken));
 		});
 
