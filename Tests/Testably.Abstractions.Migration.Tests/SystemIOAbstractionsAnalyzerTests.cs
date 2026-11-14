@@ -1,3 +1,5 @@
+using System.Threading;
+using Microsoft.CodeAnalysis.Testing;
 using Testably.Abstractions.Migration.Analyzers;
 using Verifier =
 	Testably.Abstractions.Migration.Tests.Verifiers.CSharpAnalyzerVerifier<
@@ -517,6 +519,31 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Test]
+	public async Task NonClassTypeDeclarations_ShouldNotBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public interface IHasFileSystem
+			{
+				MockFileSystem FileSystem { get; }
+			}
+
+			public struct FileSystemHolder
+			{
+				public MockFileSystem FileSystem;
+			}
+
+			public enum Kind
+			{
+				None,
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(source);
+	}
+
+	[Test]
 	public async Task WithoutTestingHelpersAssembly_ShouldDoNothing()
 	{
 		const string source = """
@@ -526,6 +553,12 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			}
 			""";
 
-		await Verifier.VerifyAnalyzerAsync(source);
+		Verifier.Test test = new()
+		{
+			TestCode = source,
+			ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+		};
+
+		await test.RunAsync(CancellationToken.None);
 	}
 }
