@@ -575,5 +575,451 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Test]
+		public async Task OptionsConstructor_TargetTypedOptions_ShouldRewriteToUseCurrentDirectoryLambda()
+		{
+			const string source = """
+				using System.IO.Abstractions;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public IFileSystem Build()
+						=> {|#0:new MockFileSystem(new() { CurrentDirectory = "/work" })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public IFileSystem Build()
+						=> new MockFileSystem(o => o.UseCurrentDirectory("/work"));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task OptionsConstructor_OptionsVariable_HasNoFix()
+		{
+			const string source = """
+				using System.IO.Abstractions;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public IFileSystem Build(MockFileSystemOptions options)
+						=> {|#0:new MockFileSystem(options)|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Test]
+		public async Task OptionsConstructor_AllPreferredLambdaParameterNamesInUse_ShouldFallBackToNumberedName()
+		{
+			const string source = """
+				using System.IO.Abstractions;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public IFileSystem Build(string o, string options, string opt, string builder)
+						=> {|#0:new MockFileSystem(new MockFileSystemOptions { CurrentDirectory = o + options + opt + builder })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public IFileSystem Build(string o, string options, string opt, string builder)
+						=> new MockFileSystem(o1 => o1.UseCurrentDirectory(o + options + opt + builder));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_TargetTypedNew_ShouldExpandToParameterlessCtorAndWrites()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						MockFileSystem fs = {|#0:new(new Dictionary<string, MockFileData>
+						{
+							["/foo"] = new MockFileData("hello"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						MockFileSystem fs = new();
+						fs.File.WriteAllText("/foo", "hello");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_EmptyCurrentDirectory_ShouldRewriteToParameterlessCtor()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/foo"] = new MockFileData("hello"),
+						}, "")|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.File.WriteAllText("/foo", "hello");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_EntryWithEncoding_ShouldForwardEncodingToWriteAllText()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+				using System.Text;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/foo"] = new MockFileData("hello", Encoding.UTF8),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+				using System.Text;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.File.WriteAllText("/foo", "hello", Encoding.UTF8);
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_KeyWithoutDirectory_SkipsCreateDirectory()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["foo.txt"] = new MockFileData("hello"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.File.WriteAllText("foo.txt", "hello");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_KeyWithDuplicateSeparators_CollapsesParentDirectory()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/work//a.txt"] = new MockFileData("a"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.Directory.CreateDirectory("/work");
+						fs.File.WriteAllText("/work//a.txt", "a");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_KeyInWindowsDriveRoot_SkipsCreateDirectory()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							[@"C:\foo.txt"] = new MockFileData("hello"),
+						})|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using System.Collections.Generic;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = new MockFileSystem();
+						fs.File.WriteAllText(@"C:\foo.txt", "hello");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task FilesConstructor_DictionaryVariable_HasNoFix()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(IDictionary<string, MockFileData> files)
+					{
+						var fs = {|#0:new MockFileSystem(files)|};
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Test]
+		public async Task FilesConstructor_CollectionInitializerEntry_HasNoFix()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							{ "/foo", new MockFileData("hello") },
+						})|};
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Test]
+		public async Task FilesConstructor_NonLiteralEntryValue_HasNoFix()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileData data)
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/foo"] = data,
+						})|};
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Test]
+		public async Task FilesConstructor_DeclarationOutsideBlock_HasNoFix()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(int i)
+					{
+						switch (i)
+						{
+							case 1:
+								var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+								{
+									["/foo"] = new MockFileData("hello"),
+								})|};
+								break;
+						}
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
+
+		[Test]
+		public async Task FilesOptionsConstructor_UnsupportedOption_HasNoFix()
+		{
+			const string source = """
+				using System.Collections.Generic;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run()
+					{
+						var fs = {|#0:new MockFileSystem(new Dictionary<string, MockFileData>
+						{
+							["/foo"] = new MockFileData("hello"),
+						}, new MockFileSystemOptions { CreateDefaultTempDir = false })|};
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				source);
+		}
 	}
 }

@@ -388,6 +388,57 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Test]
+		public async Task AccessorAddFile_TargetTypedMockFileData_ShouldRewriteToFileWriteAllText()
+		{
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> {|#0:fs.AddFile("/foo", new("hello"))|};
+				}
+				""";
+
+			const string fixedSource = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs)
+						=> fs.File.WriteAllText("/foo", "hello");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task AccessorAddFile_MockFileDataCopyConstructor_HasNoFix()
+		{
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, MockFileData template)
+						=> {|#0:fs.AddFile("/foo", {|#1:new MockFileData(template)|})|};
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				[
+					Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+					Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1),
+				],
+				source);
+		}
+
+		[Test]
 		public async Task AddDrive_EmptyInitializer_ShouldRewriteToWithDrive()
 		{
 			// `new MockDriveData()` with no initializer has nothing to chain — the
@@ -543,6 +594,35 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				{
 					public void Run(MockFileSystem fs, long d)
 						=> fs.WithDrive("D:", drive => drive.SetTotalSize(d));
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task AddDrive_AllPreferredLambdaParameterNamesInUse_ShouldFallBackToNumberedName()
+		{
+			const string source = """
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, long d, long drive, long driveBuilder)
+						=> {|#0:fs.AddDrive("D:", new MockDriveData { TotalSize = d + drive + driveBuilder })|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public void Run(MockFileSystem fs, long d, long drive, long driveBuilder)
+						=> fs.WithDrive("D:", d1 => d1.SetTotalSize(d + drive + driveBuilder));
 				}
 				""";
 

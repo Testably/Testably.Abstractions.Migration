@@ -517,6 +517,31 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 	}
 
 	[Test]
+	public async Task NonClassTypeDeclarations_ShouldNotBeFlagged()
+	{
+		const string source = """
+			using System.IO.Abstractions.TestingHelpers;
+
+			public interface IHasFileSystem
+			{
+				MockFileSystem FileSystem { get; }
+			}
+
+			public struct FileSystemHolder
+			{
+				public MockFileSystem FileSystem;
+			}
+
+			public enum Kind
+			{
+				None,
+			}
+			""";
+
+		await Verifier.VerifyAnalyzerAsync(source);
+	}
+
+	[Test]
 	public async Task WithoutTestingHelpersAssembly_ShouldDoNothing()
 	{
 		const string source = """
