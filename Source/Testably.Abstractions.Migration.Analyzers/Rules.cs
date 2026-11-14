@@ -9,8 +9,11 @@ public static class Rules
 {
 	private const string UsageCategory = "Usage";
 
+	// The help link is the fixed public documentation URL of the rule.
+#pragma warning disable S1075
 	private const string DocsBaseUrl =
 		"https://docs.testably.org/Abstractions/Migration";
+#pragma warning restore S1075
 
 	/// <summary>
 	///     Migration rule for <c>System.IO.Abstractions.TestingHelpers</c> usage. Flags any usage of
