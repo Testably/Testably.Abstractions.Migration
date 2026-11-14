@@ -1021,5 +1021,73 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
 				source);
 		}
+
+		[Test]
+		public async Task ParameterlessConstructor_UsingInsideNamespace_ShouldSwapUsingInPlace()
+		{
+			const string source = """
+				namespace N
+				{
+					using System.IO.Abstractions;
+					using System.IO.Abstractions.TestingHelpers;
+
+					public class C
+					{
+						public IFileSystem Build() => {|#0:new MockFileSystem()|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				namespace N
+				{
+					using System.IO.Abstractions;
+					using Testably.Abstractions.Testing;
+
+					public class C
+					{
+						public IFileSystem Build() => new MockFileSystem();
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
+		public async Task ParameterlessConstructor_UsingInsideFileScopedNamespace_ShouldSwapUsingInPlace()
+		{
+			const string source = """
+				namespace N;
+
+				using System.IO.Abstractions;
+				using System.IO.Abstractions.TestingHelpers;
+
+				public class C
+				{
+					public IFileSystem Build() => {|#0:new MockFileSystem()|};
+				}
+				""";
+
+			const string fixedSource = """
+				namespace N;
+
+				using System.IO.Abstractions;
+				using Testably.Abstractions.Testing;
+
+				public class C
+				{
+					public IFileSystem Build() => new MockFileSystem();
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
 	}
 }

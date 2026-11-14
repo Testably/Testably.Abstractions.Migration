@@ -1904,7 +1904,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private static CompilationUnitSyntax EnsureTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
-		if (compilationUnit.Usings.Any(u => u.Name?.ToString() == TestablyTestingNamespace))
+		if (FindUsings(compilationUnit, TestablyTestingNamespace).Any())
 		{
 			return compilationUnit;
 		}
@@ -1915,34 +1915,35 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private static CompilationUnitSyntax SwapToTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
-		UsingDirectiveSyntax? testingHelpersUsing = compilationUnit.Usings
-			.FirstOrDefault(u => u.Name?.ToString() == TestingHelpersNamespace);
-		bool hasTestablyUsing = compilationUnit.Usings
-			.Any(u => u.Name?.ToString() == TestablyTestingNamespace);
-
-		if (testingHelpersUsing is not null)
+		List<UsingDirectiveSyntax> redundant = FindUsings(compilationUnit, TestingHelpersNamespace)
+			.Where(u => u.Parent!.ChildNodes().OfType<UsingDirectiveSyntax>()
+				.Any(sibling => sibling.Name?.ToString() == TestablyTestingNamespace))
+			.ToList();
+		if (redundant.Count > 0)
 		{
-			if (hasTestablyUsing)
-			{
-				compilationUnit =
-					compilationUnit.RemoveNode(testingHelpersUsing, SyntaxRemoveOptions.KeepNoTrivia)
-					?? compilationUnit;
-			}
-			else
-			{
-				NameSyntax newName = SyntaxFactory.ParseName(TestablyTestingNamespace);
-				UsingDirectiveSyntax replacement = testingHelpersUsing.WithName(newName);
-				compilationUnit = compilationUnit.ReplaceNode(testingHelpersUsing, replacement);
-			}
-		}
-		else if (!hasTestablyUsing)
-		{
-			UsingDirectiveSyntax usingDirective = BuildUsingDirective(compilationUnit, TestablyTestingNamespace);
-			compilationUnit = compilationUnit.AddUsings(usingDirective);
+			compilationUnit = compilationUnit.RemoveNodes(redundant, SyntaxRemoveOptions.KeepNoTrivia)
+			                  ?? compilationUnit;
 		}
 
-		return compilationUnit;
+		List<UsingDirectiveSyntax> remaining = FindUsings(compilationUnit, TestingHelpersNamespace).ToList();
+		if (remaining.Count > 0)
+		{
+			NameSyntax newName = SyntaxFactory.ParseName(TestablyTestingNamespace);
+			return compilationUnit.ReplaceNodes(remaining, (original, _) => original.WithName(newName));
+		}
+
+		return EnsureTestablyUsing(compilationUnit);
 	}
+
+	/// <summary>
+	///     Finds using directives at file level and inside (file-scoped) namespace declarations, because a
+	///     namespace-scoped using shadows a file-level one for the code inside that namespace.
+	/// </summary>
+	private static IEnumerable<UsingDirectiveSyntax> FindUsings(CompilationUnitSyntax compilationUnit, string namespaceName)
+		=> compilationUnit
+			.DescendantNodes(node => node is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+			.OfType<UsingDirectiveSyntax>()
+			.Where(u => u.Name?.ToString() == namespaceName);
 
 	private static UsingDirectiveSyntax BuildUsingDirective(CompilationUnitSyntax compilationUnit, string namespaceName)
 	{
