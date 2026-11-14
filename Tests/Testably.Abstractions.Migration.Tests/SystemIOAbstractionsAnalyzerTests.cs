@@ -1,3 +1,5 @@
+using System.Threading;
+using Microsoft.CodeAnalysis.Testing;
 using Testably.Abstractions.Migration.Analyzers;
 using Verifier =
 	Testably.Abstractions.Migration.Tests.Verifiers.CSharpAnalyzerVerifier<
@@ -551,6 +553,12 @@ public sealed class SystemIOAbstractionsAnalyzerTests
 			}
 			""";
 
-		await Verifier.VerifyAnalyzerAsync(source);
+		Verifier.Test test = new()
+		{
+			TestCode = source,
+			ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+		};
+
+		await test.RunAsync(CancellationToken.None);
 	}
 }

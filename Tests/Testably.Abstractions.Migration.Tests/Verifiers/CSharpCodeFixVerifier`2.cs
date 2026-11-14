@@ -37,7 +37,7 @@ public static partial class CSharpCodeFixVerifier<TAnalyzer, TCodeFix>
 			CodeActionValidationMode = CodeActionValidationMode.SemanticStructure,
 			ReferenceAssemblies = ReferenceAssemblies.Net.Net80.AddPackages(
 			[
-				new PackageIdentity("System.IO.Abstractions.TestingHelpers", "22.0.16"),
+				new PackageIdentity("System.IO.Abstractions.TestingHelpers", "23.0.0"),
 			]),
 			TestState =
 			{
@@ -78,7 +78,7 @@ public static partial class CSharpCodeFixVerifier<TAnalyzer, TCodeFix>
 			FixedCode = fixedSource,
 			ReferenceAssemblies = ReferenceAssemblies.Net.Net80.AddPackages(
 			[
-				new PackageIdentity("System.IO.Abstractions.TestingHelpers", "22.0.16"),
+				new PackageIdentity("System.IO.Abstractions.TestingHelpers", "23.0.0"),
 			]),
 			TestState =
 			{
