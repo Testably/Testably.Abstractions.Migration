@@ -13,11 +13,11 @@ jobs:
                 os: [ ubuntu-latest, windows-latest, macos-latest ]
         runs-on: ${{ matrix.os }}
         steps:
-            -   uses: actions/checkout@v7
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
                 with:
                     fetch-depth: 0
             -   name: Setup .NET SDKs
-                uses: actions/setup-dotnet@v6
+                uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
                 with:
                     dotnet-version: |
                         8.0.x
@@ -30,7 +30,7 @@ jobs:
                 run: ./build.sh CodeCoverage
             -   name: Upload artifacts
                 if: always()
-                uses: actions/upload-artifact@v4
+                uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
                 with:
                     name: ${{ runner.os }}-artifacts
                     path: |
@@ -45,11 +45,11 @@ jobs:
             SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
             DOTNET_NOLOGO: true
         steps:
-            -   uses: actions/checkout@v7
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
                 with:
                     fetch-depth: 0
             -   name: Setup .NET SDKs
-                uses: actions/setup-dotnet@v6
+                uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
                 with:
                     dotnet-version: |
                         8.0.x
@@ -67,11 +67,11 @@ jobs:
         if: always()
         steps:
             -   name: Download Artifacts
-                uses: actions/download-artifact@v5
+                uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
                 with:
                     path: artifacts
             -   name: Publish Test Results
-                uses: EnricoMi/publish-unit-test-result-action@v2
+                uses: EnricoMi/publish-unit-test-result-action@da5b7be67623cd59bbbd1a0ce4f022050a55605f # v2.26.0
                 with:
                     comment_mode: always
                     files: "artifacts/**/**/*.trx"
@@ -83,11 +83,11 @@ jobs:
         env:
             DOTNET_NOLOGO: true
         steps:
-            -   uses: actions/checkout@v7
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
                 with:
                     fetch-depth: 0
             -   name: Setup .NET SDKs
-                uses: actions/setup-dotnet@v6
+                uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
                 with:
                     dotnet-version: |
                         8.0.x
@@ -96,7 +96,7 @@ jobs:
                 run: ./build.sh Pack
             -   name: Upload packages
                 if: always()
-                uses: actions/upload-artifact@v4
+                uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
                 with:
                     path: Artifacts/Packages
                     name: Packages
@@ -112,12 +112,12 @@ jobs:
             id-token: write
         steps:
             -   name: Download packages
-                uses: actions/download-artifact@v5
+                uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
                 with:
                     name: Packages
                     path: Artifacts/Packages
             -   name: Setup .NET SDKs
-                uses: actions/setup-dotnet@v6
+                uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
             -   name: NuGet login
                 id: login
                 uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
@@ -147,7 +147,7 @@ jobs:
                 # The packages are already pushed at this point and cannot be withdrawn, so a failure here does not
                 # fail the run; the next step reports it.
                 continue-on-error: true
-                uses: softprops/action-gh-release@v3
+                uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
                 # Without `name` and `tag_name` the action releases the pushed tag and names the release after it.
                 with:
                     token: ${{ secrets.GITHUB_TOKEN }}
@@ -179,7 +179,7 @@ jobs:
             -   name: Comment relevant issues and pull requests
                 if: steps.check-pre-release.outputs.release == 'true'
                 continue-on-error: true
-                uses: apexskier/github-release-commenter@v1.3.6
+                uses: apexskier/github-release-commenter@3bd413ad5e1d603bfe2282f9f06f2bdcec079327 # v1.3.6
                 with:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                     comment-template: |
