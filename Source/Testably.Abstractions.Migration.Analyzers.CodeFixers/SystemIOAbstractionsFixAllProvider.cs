@@ -70,8 +70,8 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 		// expansion) can absorb a sibling annotated node so that its later dispatch
 		// returns null — but the absorbed item's using-change contribution must still
 		// land, otherwise the file would be left half-migrated.
-		SystemIOAbstractionsCodeFixProvider.UsingChange usingChange =
-			SystemIOAbstractionsCodeFixProvider.UsingChange.None;
+		SystemIOAbstractionsCodeFixProvider.UsingChanges usingChange =
+			SystemIOAbstractionsCodeFixProvider.UsingChanges.None;
 		foreach (WorkItem item in work)
 		{
 			usingChange |= SystemIOAbstractionsCodeFixProvider.GetUsingChange(item.Pattern);
@@ -83,7 +83,7 @@ internal sealed class SystemIOAbstractionsFixAllProvider : DocumentBasedFixAllPr
 		// Suppress the using swap when no rewrite landed. Otherwise we'd add the Testably
 		// using to a file whose code still references TestingHelpers — non-compiling.
 		if (anyRewriteSucceeded
-		    && usingChange != SystemIOAbstractionsCodeFixProvider.UsingChange.None)
+		    && usingChange != SystemIOAbstractionsCodeFixProvider.UsingChanges.None)
 		{
 			finalCu = SystemIOAbstractionsCodeFixProvider.ApplyUsingChange(finalCu, usingChange);
 		}

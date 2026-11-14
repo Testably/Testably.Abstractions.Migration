@@ -1715,7 +1715,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     needed by a rewrite outside that namespace.
 	/// </summary>
 	[System.Flags]
-	internal enum UsingChange
+	internal enum UsingChanges
 	{
 		None = 0,
 		Ensure = 1,
@@ -1726,19 +1726,19 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     Maps a diagnostic <see cref="Patterns" /> id to the using-directive change its
 	///     rewrite needs. Patterns whose rewrite would leave the receiver typed as the
 	///     concrete <c>System.IO.Abstractions.TestingHelpers.MockFileSystem</c> require a
-	///     <see cref="UsingChange.Swap" /> (replace the using); patterns whose rewrite is an
+	///     <see cref="UsingChanges.Swap" /> (replace the using); patterns whose rewrite is an
 	///     extension method that needs the Testably namespace visible but does not retarget
-	///     the receiver require an <see cref="UsingChange.Ensure" /> (add the using).
+	///     the receiver require an <see cref="UsingChanges.Ensure" /> (add the using).
 	/// </summary>
-	internal static UsingChange GetUsingChange(string pattern) => pattern switch
+	internal static UsingChanges GetUsingChange(string pattern) => pattern switch
 	{
-		Patterns.MockFileSystemDefaultConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemOptionsConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemFilesConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemFilesOptionsConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemAddDrive => UsingChange.Swap,
-		Patterns.MockFileSystemAddFilesFromEmbeddedNamespace => UsingChange.Ensure,
-		_ => UsingChange.None,
+		Patterns.MockFileSystemDefaultConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemOptionsConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemFilesConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemFilesOptionsConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemAddDrive => UsingChanges.Swap,
+		Patterns.MockFileSystemAddFilesFromEmbeddedNamespace => UsingChanges.Ensure,
+		_ => UsingChanges.None,
 	};
 
 	/// <summary>
@@ -1757,14 +1757,14 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     of a fix pipeline so that overlapping using edits from multiple rewrites collapse
 	///     into a single deterministic change.
 	/// </summary>
-	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChange change)
+	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChanges change)
 	{
-		if ((change & UsingChange.Swap) != 0)
+		if ((change & UsingChanges.Swap) != 0)
 		{
 			cu = SwapToTestablyUsing(cu);
 		}
 
-		if ((change & UsingChange.Ensure) != 0)
+		if ((change & UsingChanges.Ensure) != 0)
 		{
 			cu = EnsureTestablyUsing(cu);
 		}
