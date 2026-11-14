@@ -169,8 +169,8 @@ public class AccessorMethodTests
 		bool sawY = false;
 		foreach (string path in fs.AllDirectories)
 		{
-			sawX |= path.EndsWith("x", StringComparison.Ordinal);
-			sawY |= path.EndsWith("y", StringComparison.Ordinal);
+			sawX |= path.EndsWith('x');
+			sawY |= path.EndsWith('y');
 		}
 
 		await That(sawX).IsTrue();
