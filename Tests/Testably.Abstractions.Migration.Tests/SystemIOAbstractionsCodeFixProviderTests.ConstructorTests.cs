@@ -1058,6 +1058,43 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Test]
+		public async Task ParameterlessConstructor_TestablyAliasInSameNamespace_ShouldStillSwapUsing()
+		{
+			const string source = """
+				namespace N
+				{
+					using System.IO.Abstractions;
+					using System.IO.Abstractions.TestingHelpers;
+					using T = Testably.Abstractions.Testing;
+
+					public class C
+					{
+						public IFileSystem Build() => {|#0:new MockFileSystem()|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				namespace N
+				{
+					using System.IO.Abstractions;
+					using Testably.Abstractions.Testing;
+					using T = Testably.Abstractions.Testing;
+
+					public class C
+					{
+						public IFileSystem Build() => new MockFileSystem();
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
 		public async Task ParameterlessConstructor_UsingInsideFileScopedNamespace_ShouldSwapUsingInPlace()
 		{
 			const string source = """

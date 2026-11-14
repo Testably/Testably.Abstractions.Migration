@@ -1710,9 +1710,11 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	/// <summary>
 	///     What change a pattern's rewrite needs to apply to the file's using directives
-	///     once the syntax rewrite is in place. Ordered by strength: <see cref="Swap" />
-	///     subsumes <see cref="Ensure" />, which subsumes <see cref="None" />.
+	///     once the syntax rewrite is in place. The flags combine: a <see cref="Swap" /> may
+	///     only retarget a namespace-scoped using, so it does not cover an <see cref="Ensure" />
+	///     needed by a rewrite outside that namespace.
 	/// </summary>
+	[System.Flags]
 	internal enum UsingChange
 	{
 		None = 0,
@@ -1756,12 +1758,19 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     into a single deterministic change.
 	/// </summary>
 	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChange change)
-		=> change switch
+	{
+		if ((change & UsingChange.Swap) != 0)
 		{
-			UsingChange.Swap => SwapToTestablyUsing(cu),
-			UsingChange.Ensure => EnsureTestablyUsing(cu),
-			_ => cu,
-		};
+			cu = SwapToTestablyUsing(cu);
+		}
+
+		if ((change & UsingChange.Ensure) != 0)
+		{
+			cu = EnsureTestablyUsing(cu);
+		}
+
+		return cu;
+	}
 
 	/// <summary>
 	///     Single-diagnostic entry point used by every per-pattern CodeAction. Re-runs the
@@ -1904,7 +1913,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private static CompilationUnitSyntax EnsureTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
-		if (FindUsings(compilationUnit, TestablyTestingNamespace).Any())
+		if (compilationUnit.Usings.Any(u => u.Alias is null && u.Name?.ToString() == TestablyTestingNamespace))
 		{
 			return compilationUnit;
 		}
@@ -1917,7 +1926,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	{
 		List<UsingDirectiveSyntax> redundant = FindUsings(compilationUnit, TestingHelpersNamespace)
 			.Where(u => u.Parent!.ChildNodes().OfType<UsingDirectiveSyntax>()
-				.Any(sibling => sibling.Name?.ToString() == TestablyTestingNamespace))
+				.Any(sibling => sibling.Alias is null && sibling.Name?.ToString() == TestablyTestingNamespace))
 			.ToList();
 		if (redundant.Count > 0)
 		{
@@ -1936,14 +1945,14 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	}
 
 	/// <summary>
-	///     Finds using directives at file level and inside (file-scoped) namespace declarations, because a
-	///     namespace-scoped using shadows a file-level one for the code inside that namespace.
+	///     Finds the non-alias using directives at file level and inside (file-scoped) namespace declarations,
+	///     because a namespace-scoped using shadows a file-level one for the code inside that namespace.
 	/// </summary>
 	private static IEnumerable<UsingDirectiveSyntax> FindUsings(CompilationUnitSyntax compilationUnit, string namespaceName)
 		=> compilationUnit
 			.DescendantNodes(node => node is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
 			.OfType<UsingDirectiveSyntax>()
-			.Where(u => u.Name?.ToString() == namespaceName);
+			.Where(u => u.Alias is null && u.Name?.ToString() == namespaceName);
 
 	private static UsingDirectiveSyntax BuildUsingDirective(CompilationUnitSyntax compilationUnit, string namespaceName)
 	{
