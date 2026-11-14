@@ -109,6 +109,7 @@ jobs:
         needs: [ pack ]
         permissions:
             contents: write
+            id-token: write
         steps:
             -   name: Download packages
                 uses: actions/download-artifact@v5
@@ -117,6 +118,11 @@ jobs:
                     path: Artifacts/Packages
             -   name: Setup .NET SDKs
                 uses: actions/setup-dotnet@v6
+            -   name: NuGet login
+                id: login
+                uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+                with:
+                    user: ${{ secrets.NUGET_USER }}
             -   name: Publish
                 run: |
                     echo "Found the following packages to push:"
@@ -127,7 +133,7 @@ jobs:
                     done
                     for entry in Artifacts/Packages/*.nupkg
                     do
-                       dotnet nuget push $entry --source https://api.nuget.org/v3/index.json --api-key "${{secrets.NUGET_API_KEY}}" --skip-duplicate
+                       dotnet nuget push $entry --source https://api.nuget.org/v3/index.json --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --skip-duplicate
                     done
             -   name: Check pre-release
                 id: check-pre-release
@@ -136,14 +142,23 @@ jobs:
                         echo "release=true" >> $GITHUB_OUTPUT
                     fi
             -   name: Create GitHub release
+                id: create-release
                 if: steps.check-pre-release.outputs.release == 'true'
+                # The packages are already pushed at this point and cannot be withdrawn, so a failure here does not
+                # fail the run; the next step reports it.
                 continue-on-error: true
                 uses: softprops/action-gh-release@v3
+                # Without `name` and `tag_name` the action releases the pushed tag and names the release after it.
                 with:
-                    name: ${{ steps.tag.outputs.release_version }}
-                    tag_name: ${{ steps.tag.outputs.release_version }}
                     token: ${{ secrets.GITHUB_TOKEN }}
                     generate_release_notes: true
+            -   name: Report a failed GitHub release
+                if: steps.create-release.outcome == 'failure'
+                run: |
+                    message="The packages of $GITHUB_REF_NAME were pushed to nuget.org, but creating the GitHub release failed. Create the release for the tag manually."
+                    echo "::warning title=GitHub release not created::$message"
+                    echo "> [!WARNING]" >> "$GITHUB_STEP_SUMMARY"
+                    echo "> $message" >> "$GITHUB_STEP_SUMMARY"
     
     finalize-release:
         name: "Finalize release"
