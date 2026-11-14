@@ -1041,6 +1041,61 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Test]
+		public async Task AddFilesFromEmbeddedNamespace_TestablyUsingOnlyInSiblingNamespace_ShouldAddFileLevelUsing()
+		{
+			const string source = """
+				namespace A
+				{
+					using Testably.Abstractions.Testing;
+
+					public class D
+					{
+					}
+				}
+
+				namespace B
+				{
+					using System.IO.Abstractions.TestingHelpers;
+
+					public class C
+					{
+						public void Run(MockFileSystem fs)
+							=> {|#0:fs.AddFilesFromEmbeddedNamespace("/data", typeof(C).Assembly, "TestProject.TestData")|};
+					}
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				namespace A
+				{
+					using Testably.Abstractions.Testing;
+
+					public class D
+					{
+					}
+				}
+
+				namespace B
+				{
+					using System.IO.Abstractions.TestingHelpers;
+
+					public class C
+					{
+						public void Run(MockFileSystem fs)
+							=> fs.InitializeEmbeddedResourcesFromAssembly("/data", typeof(C).Assembly, relativePath: "TestData");
+					}
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+				fixedSource);
+		}
+
+		[Test]
 		public async Task AddFilesFromEmbeddedNamespace_NestedNamespace_PreservesPath()
 		{
 			// Multi-segment relative path: dots are converted to forward slashes so

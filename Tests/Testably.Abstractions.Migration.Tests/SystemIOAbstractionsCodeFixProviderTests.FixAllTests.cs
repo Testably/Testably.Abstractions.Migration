@@ -55,6 +55,58 @@ public partial class SystemIOAbstractionsCodeFixProviderTests
 		}
 
 		[Test]
+		public async Task NamespaceScopedSwapPlusEmbeddedResourcesOutsideNamespace_ShouldAlsoAddFileLevelUsing()
+		{
+			const string source = """
+				namespace A
+				{
+					using System.IO.Abstractions;
+					using System.IO.Abstractions.TestingHelpers;
+
+					public class C
+					{
+						public IFileSystem Build() => {|#0:new MockFileSystem()|};
+					}
+				}
+
+				public class D
+				{
+					public void Run(System.IO.Abstractions.TestingHelpers.MockFileSystem fs)
+						=> {|#1:fs.AddFilesFromEmbeddedNamespace("/data", typeof(D).Assembly, "TestProject.TestData")|};
+				}
+				""";
+
+			const string fixedSource = """
+				using Testably.Abstractions.Testing;
+
+				namespace A
+				{
+					using System.IO.Abstractions;
+					using Testably.Abstractions.Testing;
+
+					public class C
+					{
+						public IFileSystem Build() => new MockFileSystem();
+					}
+				}
+
+				public class D
+				{
+					public void Run(System.IO.Abstractions.TestingHelpers.MockFileSystem fs)
+						=> fs.InitializeEmbeddedResourcesFromAssembly("/data", typeof(D).Assembly, relativePath: "TestData");
+				}
+				""";
+
+			await Verifier.VerifyCodeFixAsync(
+				source,
+				[
+					Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(0),
+					Verifier.Diagnostic(Rules.SystemIOAbstractionsRule).WithLocation(1),
+				],
+				fixedSource);
+		}
+
+		[Test]
 		public async Task ConstructorPlusAccessorCalls_OnSameMockFileSystem_ShouldAllMigrate()
 		{
 			const string source = """

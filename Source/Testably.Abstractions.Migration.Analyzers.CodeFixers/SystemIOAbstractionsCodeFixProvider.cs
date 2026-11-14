@@ -1710,10 +1710,12 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	/// <summary>
 	///     What change a pattern's rewrite needs to apply to the file's using directives
-	///     once the syntax rewrite is in place. Ordered by strength: <see cref="Swap" />
-	///     subsumes <see cref="Ensure" />, which subsumes <see cref="None" />.
+	///     once the syntax rewrite is in place. The flags combine: a <see cref="Swap" /> may
+	///     only retarget a namespace-scoped using, so it does not cover an <see cref="Ensure" />
+	///     needed by a rewrite outside that namespace.
 	/// </summary>
-	internal enum UsingChange
+	[System.Flags]
+	internal enum UsingChanges
 	{
 		None = 0,
 		Ensure = 1,
@@ -1724,19 +1726,19 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     Maps a diagnostic <see cref="Patterns" /> id to the using-directive change its
 	///     rewrite needs. Patterns whose rewrite would leave the receiver typed as the
 	///     concrete <c>System.IO.Abstractions.TestingHelpers.MockFileSystem</c> require a
-	///     <see cref="UsingChange.Swap" /> (replace the using); patterns whose rewrite is an
+	///     <see cref="UsingChanges.Swap" /> (replace the using); patterns whose rewrite is an
 	///     extension method that needs the Testably namespace visible but does not retarget
-	///     the receiver require an <see cref="UsingChange.Ensure" /> (add the using).
+	///     the receiver require an <see cref="UsingChanges.Ensure" /> (add the using).
 	/// </summary>
-	internal static UsingChange GetUsingChange(string pattern) => pattern switch
+	internal static UsingChanges GetUsingChange(string pattern) => pattern switch
 	{
-		Patterns.MockFileSystemDefaultConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemOptionsConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemFilesConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemFilesOptionsConstructor => UsingChange.Swap,
-		Patterns.MockFileSystemAddDrive => UsingChange.Swap,
-		Patterns.MockFileSystemAddFilesFromEmbeddedNamespace => UsingChange.Ensure,
-		_ => UsingChange.None,
+		Patterns.MockFileSystemDefaultConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemOptionsConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemFilesConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemFilesOptionsConstructor => UsingChanges.Swap,
+		Patterns.MockFileSystemAddDrive => UsingChanges.Swap,
+		Patterns.MockFileSystemAddFilesFromEmbeddedNamespace => UsingChanges.Ensure,
+		_ => UsingChanges.None,
 	};
 
 	/// <summary>
@@ -1755,13 +1757,20 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 	///     of a fix pipeline so that overlapping using edits from multiple rewrites collapse
 	///     into a single deterministic change.
 	/// </summary>
-	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChange change)
-		=> change switch
+	internal static CompilationUnitSyntax ApplyUsingChange(CompilationUnitSyntax cu, UsingChanges change)
+	{
+		if ((change & UsingChanges.Swap) != 0)
 		{
-			UsingChange.Swap => SwapToTestablyUsing(cu),
-			UsingChange.Ensure => EnsureTestablyUsing(cu),
-			_ => cu,
-		};
+			cu = SwapToTestablyUsing(cu);
+		}
+
+		if ((change & UsingChanges.Ensure) != 0)
+		{
+			cu = EnsureTestablyUsing(cu);
+		}
+
+		return cu;
+	}
 
 	/// <summary>
 	///     Single-diagnostic entry point used by every per-pattern CodeAction. Re-runs the
@@ -1904,7 +1913,7 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private static CompilationUnitSyntax EnsureTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
-		if (compilationUnit.Usings.Any(u => u.Name?.ToString() == TestablyTestingNamespace))
+		if (compilationUnit.Usings.Any(u => u.Alias is null && u.Name?.ToString() == TestablyTestingNamespace))
 		{
 			return compilationUnit;
 		}
@@ -1915,34 +1924,35 @@ public class SystemIOAbstractionsCodeFixProvider : CodeFixProvider
 
 	private static CompilationUnitSyntax SwapToTestablyUsing(CompilationUnitSyntax compilationUnit)
 	{
-		UsingDirectiveSyntax? testingHelpersUsing = compilationUnit.Usings
-			.FirstOrDefault(u => u.Name?.ToString() == TestingHelpersNamespace);
-		bool hasTestablyUsing = compilationUnit.Usings
-			.Any(u => u.Name?.ToString() == TestablyTestingNamespace);
-
-		if (testingHelpersUsing is not null)
+		List<UsingDirectiveSyntax> redundant = FindUsings(compilationUnit, TestingHelpersNamespace)
+			.Where(u => u.Parent!.ChildNodes().OfType<UsingDirectiveSyntax>()
+				.Any(sibling => sibling.Alias is null && sibling.Name?.ToString() == TestablyTestingNamespace))
+			.ToList();
+		if (redundant.Count > 0)
 		{
-			if (hasTestablyUsing)
-			{
-				compilationUnit =
-					compilationUnit.RemoveNode(testingHelpersUsing, SyntaxRemoveOptions.KeepNoTrivia)
-					?? compilationUnit;
-			}
-			else
-			{
-				NameSyntax newName = SyntaxFactory.ParseName(TestablyTestingNamespace);
-				UsingDirectiveSyntax replacement = testingHelpersUsing.WithName(newName);
-				compilationUnit = compilationUnit.ReplaceNode(testingHelpersUsing, replacement);
-			}
-		}
-		else if (!hasTestablyUsing)
-		{
-			UsingDirectiveSyntax usingDirective = BuildUsingDirective(compilationUnit, TestablyTestingNamespace);
-			compilationUnit = compilationUnit.AddUsings(usingDirective);
+			compilationUnit = compilationUnit.RemoveNodes(redundant, SyntaxRemoveOptions.KeepNoTrivia)
+			                  ?? compilationUnit;
 		}
 
-		return compilationUnit;
+		List<UsingDirectiveSyntax> remaining = FindUsings(compilationUnit, TestingHelpersNamespace).ToList();
+		if (remaining.Count > 0)
+		{
+			NameSyntax newName = SyntaxFactory.ParseName(TestablyTestingNamespace);
+			return compilationUnit.ReplaceNodes(remaining, (original, _) => original.WithName(newName));
+		}
+
+		return EnsureTestablyUsing(compilationUnit);
 	}
+
+	/// <summary>
+	///     Finds the non-alias using directives at file level and inside (file-scoped) namespace declarations,
+	///     because a namespace-scoped using shadows a file-level one for the code inside that namespace.
+	/// </summary>
+	private static IEnumerable<UsingDirectiveSyntax> FindUsings(CompilationUnitSyntax compilationUnit, string namespaceName)
+		=> compilationUnit
+			.DescendantNodes(node => node is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+			.OfType<UsingDirectiveSyntax>()
+			.Where(u => u.Alias is null && u.Name?.ToString() == namespaceName);
 
 	private static UsingDirectiveSyntax BuildUsingDirective(CompilationUnitSyntax compilationUnit, string namespaceName)
 	{
