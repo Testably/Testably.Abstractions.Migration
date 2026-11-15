@@ -116,9 +116,10 @@ public class TempFileCleanerTests
 | TestableIO                                                | Testably                                                          |
 |-----------------------------------------------------------|-------------------------------------------------------------------|
 | `new MockFileSystem()`                                    | `new MockFileSystem()`                                            |
-| `new MockFileSystem(IDictionary<string, MockFileData>)`   | `new MockFileSystem()` followed by per-entry `Initialize…` calls  |
-| `new MockFileSystem(MockFileSystemOptions)`               | `new MockFileSystem(o => o…)` with mapped option setters          |
-| `new MockFileSystem(IDictionary<…>, MockFileSystemOptions)` | combined dict expansion + options lambda                        |
+| `new MockFileSystem(IDictionary<string, MockFileData>)`   | `new MockFileSystem()` followed by `fs.Directory.CreateDirectory(…)` for each parent directory and a write call for each file (only as a local declaration in a block) |
+| `new MockFileSystem(MockFileSystemOptions)` with `CurrentDirectory` | `new MockFileSystem(o => o.UseCurrentDirectory(…))` (other options have no fix) |
+| `new MockFileSystem(IDictionary<…>, MockFileSystemOptions)` | both of the above                                             |
+| `new MockFileSystem(IDictionary<…>, currentDirectory)`    | both of the above, with `o => o.UseCurrentDirectory(currentDirectory)` |
 
 The files of the dictionary become statements after the constructor, and the options become a lambda:
 
@@ -203,7 +204,7 @@ fs.WithDrive("D:", d => d.SetTotalSize(1024));
 
 ### `MockFileData` property access
 
-Reads of `MockFileData` properties (e.g. `fs.GetFile(path).LastWriteTime`) are routed to the matching Testably file-system call (e.g. `fs.File.GetLastWriteTime(path)`). Writes (e.g. `fs.GetFile(path).LastWriteTime = value`) become `fs.File.SetLastWriteTime(path, value)`. The fixer only handles the one-shot `fs.GetFile(path).Prop` shape; property access through a captured reference is left for manual review (see below).
+Reads of `MockFileData` properties (e.g. `fs.GetFile(path).LastWriteTime`) are routed to the matching Testably file-system call; the time properties are read as UTC (e.g. `fs.File.GetLastWriteTimeUtc(path)`). Writes of `TextContents`, `Contents` and `Attributes` become `fs.File.WriteAllText`, `fs.File.WriteAllBytes` and `fs.File.SetAttributes`; writes of the time properties have no fix. The fixer only handles the one-shot `fs.GetFile(path).Prop` shape; property access through a captured reference is left for manual review (see below).
 
 A time property is read as UTC, and a written property becomes a write call:
 
