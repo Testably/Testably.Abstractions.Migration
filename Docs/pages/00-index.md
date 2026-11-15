@@ -8,11 +8,11 @@ import PackageInstall from '@site/src/components/PackageInstall';
 
 # Testably.Abstractions.Migration
 
-`Testably.Abstractions.Migration` is a Roslyn analyzer that automates the call-site rewrites from TestableIO to [Testably.Abstractions](/Abstractions) described on the [migration overview](../). It flags every supported pattern (with code-fix support) and reports the rest so you can address them by hand.
+`Testably.Abstractions.Migration` is a Roslyn analyzer with a code fix that automates the call-site rewrites from TestableIO to [Testably.Abstractions](/Abstractions) described in [Migration from TestableIO](../). The code fix rewrites the supported patterns, and the analyzer reports the rest so you can address them by hand.
 
 ## Installation
 
-The migration package is a one-shot development tool: install it, migrate, then uninstall. It ships only the analyzer and code fixer, no runtime code, and is marked as a `DevelopmentDependency` so it never flows transitively to consumers of your test project.
+The migration package is a one-shot development tool: install it, migrate, then uninstall. It ships only the analyzer and the code fix, no runtime code, and is marked as a `DevelopmentDependency` so it never flows transitively to consumers of your test project.
 
 Because the package does not pull `Testably.Abstractions.Testing` transitively, **you must reference it yourself** in the project being migrated. Otherwise the rewritten call sites would compile while the migration package is installed but stop compiling the moment you remove it.
 
@@ -26,8 +26,8 @@ Then add the migration package:
 
 1. **Reference the target library.** Add `Testably.Abstractions.Testing` to the project you want to migrate (see above). Existing `TestableIO.System.IO.Abstractions.TestingHelpers` usage keeps compiling side-by-side.
 2. **Install the migration package.** Adds the analyzer. Every supported construct is reported as warning `TestablyM001`.
-3. **Apply the code fix.** Use your IDE (Visual Studio, Rider, VS Code with C# Dev Kit) to fix diagnostics one by one, or run `dotnet format analyzers` to apply every available fix in bulk.
-4. **Address manual-review diagnostics.** Some patterns have no safe automatic rewrite (see [Manual review](#manual-review)). The analyzer reports them so they are discoverable; you migrate each call site by hand.
+3. **Apply the code fix.** Use your IDE (Visual Studio, Rider, VS Code with C# Dev Kit) to apply it file by file, as one fix migrates the whole file, or run `dotnet format analyzers` to apply every available fix in bulk.
+4. **Address manual-review diagnostics.** Some patterns have no safe automatic rewrite (see [the patterns that need manual review](#manual-review)). The analyzer reports them so they are discoverable; you migrate each call site by hand.
 5. **Remove `TestableIO.System.IO.Abstractions.TestingHelpers`.** Once the analyzer is quiet, drop the dependency (or `System.IO.Abstractions.TestingHelpers`, the older package id that forwards to it).
 6. **Uninstall the migration package.** It has served its purpose and only adds analyzer overhead from here on.
 
@@ -38,11 +38,11 @@ dotnet remove package Testably.Abstractions.Migration
 
 ## How it works
 
-The analyzer emits a single diagnostic id, `TestablyM001`. Each call site carries a `pattern` property in `Diagnostic.Properties` that tells the code-fix provider which rewrite to perform. Patterns without an automatic rewrite still get a `TestablyM001` warning so you can locate them; the code fix just declines to register an action.
+The analyzer reports every call site with the single diagnostic id `TestablyM001`. Patterns without an automatic rewrite are reported as well, so you can locate them; the code fix just offers no rewrite for them.
 
-| Diagnostic     | Source library         | Code fix title                                              |
-|----------------|------------------------|-------------------------------------------------------------|
-| `TestablyM001` | System.IO.Abstractions | *Migrate System.IO.Abstractions MockFileSystem to Testably* |
+| Diagnostic     | Source library         | Code fix title                                                            |
+|----------------|------------------------|---------------------------------------------------------------------------|
+| `TestablyM001` | System.IO.Abstractions | *Migrate System.IO.Abstractions MockFileSystem to Testably.Abstractions* |
 
 ## Supported migrations
 
@@ -113,7 +113,7 @@ public class TempFileCleanerTests
 
 ### `MockFileSystem` constructors
 
-| TestableIO                                                | Testably                                                          |
+| TestableIO                                                | Testably.Abstractions                                             |
 |-----------------------------------------------------------|-------------------------------------------------------------------|
 | `new MockFileSystem()`                                    | `new MockFileSystem()`                                            |
 | `new MockFileSystem(IDictionary<string, MockFileData>)`   | `new MockFileSystem()` followed by `fs.Directory.CreateDirectory(…)` for each parent directory and a write call for each file (only as a local declaration in a block) |
@@ -157,7 +157,7 @@ fs.File.SetAttributes("/work/config.json", FileAttributes.ReadOnly);
 
 ### `IMockFileDataAccessor` methods on `MockFileSystem`
 
-| TestableIO                                  | Testably                                                |
+| TestableIO                                  | Testably.Abstractions                                   |
 |---------------------------------------------|---------------------------------------------------------|
 | `fs.AddFile(path, new MockFileData(text[, encoding]))` | `fs.File.WriteAllText(path, text[, encoding])` |
 | `fs.AddFile(path, new MockFileData(bytes))` | `fs.File.WriteAllBytes(path, bytes)`                    |
@@ -204,7 +204,7 @@ fs.WithDrive("D:", d => d.SetTotalSize(1024));
 
 ### `MockFileData` property access
 
-Reads of `MockFileData` properties (e.g. `fs.GetFile(path).LastWriteTime`) are routed to the matching Testably file-system call; the time properties are read as UTC (e.g. `fs.File.GetLastWriteTimeUtc(path)`). Writes of `TextContents`, `Contents` and `Attributes` become `fs.File.WriteAllText`, `fs.File.WriteAllBytes` and `fs.File.SetAttributes`; writes of the time properties have no fix. The fixer only handles the one-shot `fs.GetFile(path).Prop` shape; property access through a captured reference is left for manual review (see below).
+Reads of `MockFileData` properties (e.g. `fs.GetFile(path).LastWriteTime`) are routed to the matching Testably.Abstractions file-system call; the time properties are read as UTC (e.g. `fs.File.GetLastWriteTimeUtc(path)`). Writes of `TextContents`, `Contents` and `Attributes` become `fs.File.WriteAllText`, `fs.File.WriteAllBytes` and `fs.File.SetAttributes`; writes of the time properties have no fix. The code fix only handles the one-shot `fs.GetFile(path).Prop` shape; property access through a captured reference is left for [manual review](#manual-review).
 
 A time property is read as UTC, and a written property becomes a write call:
 
@@ -241,15 +241,15 @@ These call sites are flagged with `TestablyM001` but have no automatic rewrite, 
 | Pattern                                              | Why manual                                                                                        |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------|
 | `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](../../06-companion-libraries/02-access-control.mdx); to deny access, register a strategy with [`WithAccessControlStrategy`](../../03-file-system/07-access-control.mdx). |
-| `MockFileData.AllowedFileShare`                      | Testably [honors the `FileShare`](../../03-file-system/09-safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
+| `MockFileData.AllowedFileShare`                      | Testably.Abstractions [honors the `FileShare`](../../03-file-system/09-safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
 | `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](../../03-file-system/08-unix-file-mode.mdx). |
 | `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](../../03-file-system/11-file-version-info.mdx). |
-| Subclassing `MockFileSystem` / `MockFileData`        | Inheritance contract differs in Testably.                                                         |
-| `new MockFileData(MockFileData template)`            | Copy-clone semantics differ; no Testably equivalent.                                              |
+| Subclassing `MockFileSystem` / `MockFileData`        | Inheritance contract differs in Testably.Abstractions.                                            |
+| `new MockFileData(MockFileData template)`            | Copy-clone semantics differ; no Testably.Abstractions equivalent.                                 |
 | Captured-reference `MockFileData` property access    | `var data = fs.GetFile(path); data.Prop = …` cannot be rewritten without local flow analysis.     |
-| `fs.AllPaths` / `AllFiles` / `AllDirectories` / `AllDrives` | Testably has no enumeration properties; the natural replacements need a root or drive scope the analyzer cannot infer. |
-| `fs.MockTime(Func<DateTime>)`                        | TestableIO calls the delegate per timestamp request; Testably installs a fixed-then-mutable `MockTimeSystem` at construction. No observably-equivalent automatic rewrite for arbitrary delegates. |
-| `fs.AddFileFromEmbeddedResource(...)`                | Testably exposes only a bulk `InitializeEmbeddedResourcesFromAssembly` with path-style matching; the single-file mapping is not safe to automate. |
+| `fs.AllPaths` / `AllFiles` / `AllDirectories` / `AllDrives` | Testably.Abstractions has no enumeration properties; the natural replacements need a root or drive scope the analyzer cannot infer. |
+| `fs.MockTime(Func<DateTime>)`                        | TestableIO calls the delegate per timestamp request; Testably.Abstractions installs a fixed-then-mutable `MockTimeSystem` at construction. No observably-equivalent automatic rewrite for arbitrary delegates. |
+| `fs.AddFileFromEmbeddedResource(...)`                | Testably.Abstractions exposes only a bulk `InitializeEmbeddedResourcesFromAssembly` with path-style matching; the single-file mapping is not safe to automate. |
 
 ## Suppressing the diagnostic
 
@@ -261,7 +261,7 @@ MockFileSystem fs = new MockFileSystem();
 #pragma warning restore TestablyM001
 ```
 
-or via an `.editorconfig` entry scoped to the file/folder:
+or via an `.editorconfig` entry scoped to the file or folder:
 
 ```text title=".editorconfig"
 [**/Legacy/**.cs]
