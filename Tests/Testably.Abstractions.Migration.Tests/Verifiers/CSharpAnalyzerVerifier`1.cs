@@ -30,10 +30,7 @@ public static partial class CSharpAnalyzerVerifier<TAnalyzer>
 		Test test = new()
 		{
 			TestCode = source,
-			ReferenceAssemblies = ReferenceAssemblies.Net.Net80.AddPackages(
-			[
-				new PackageIdentity("System.IO.Abstractions.TestingHelpers", "23.0.0"),
-			]),
+			ReferenceAssemblies = CSharpVerifierHelper.ReferenceAssemblies,
 			TestState =
 			{
 				AdditionalReferences =

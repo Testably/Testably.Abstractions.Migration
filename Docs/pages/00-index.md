@@ -87,7 +87,9 @@ fs.File.WriteAllText("/a", "x");
 
 | TestableIO                                  | Testably                                                |
 |---------------------------------------------|---------------------------------------------------------|
-| `fs.AddFile(path, mockFileData)`            | `fs.Initialize().With…(…)` (chain mapped from contents) |
+| `fs.AddFile(path, new MockFileData(text[, encoding]))` | `fs.File.WriteAllText(path, text[, encoding])` |
+| `fs.AddFile(path, new MockFileData(bytes))` | `fs.File.WriteAllBytes(path, bytes)`                    |
+| `fs.AddFile(path, new MockFileData(…) { Attributes = attributes })` | the write call above, followed by `fs.File.SetAttributes(path, attributes)` (only as a statement in a block) |
 | `fs.AddEmptyFile(path)`                     | `fs.File.Create(path).Dispose()`                        |
 | `fs.AddDirectory(path)`                     | `fs.Directory.CreateDirectory(path)`                    |
 | `fs.RemoveFile(path)`                       | `fs.File.Delete(path)`                                  |
