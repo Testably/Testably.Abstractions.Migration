@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Testing;
 
 namespace Testably.Abstractions.Migration.Tests.Verifiers;
 
@@ -15,6 +16,14 @@ internal static class CSharpVerifierHelper
 	/// </summary>
 	internal static ImmutableDictionary<string, ReportDiagnostic> NullableWarnings { get; } =
 		GetNullableWarningsFromCompiler();
+
+	/// <summary>
+	///     The reference assemblies of the tests, with the TestableIO <c>MockFileSystem</c>.
+	/// </summary>
+	internal static ReferenceAssemblies ReferenceAssemblies { get; } = ReferenceAssemblies.Net.Net80.AddPackages(
+	[
+		new PackageIdentity("System.IO.Abstractions.TestingHelpers", "23.0.0"),
+	]);
 
 	private static ImmutableDictionary<string, ReportDiagnostic> GetNullableWarningsFromCompiler()
 	{
