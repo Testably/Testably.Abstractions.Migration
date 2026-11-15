@@ -3,6 +3,7 @@ sidebar_label: Migration analyzer
 description: A Roslyn analyzer and code fix that rewrites TestableIO MockFileSystem tests to the Testably.Abstractions MockFileSystem.
 ---
 
+import ApplyFix from '@site/src/components/ApplyFix';
 import PackageInstall from '@site/src/components/PackageInstall';
 
 # Testably.Abstractions.Migration
@@ -44,6 +45,34 @@ The analyzer emits a single diagnostic id, `TestablyM001`. Each call site carrie
 | `TestablyM001` | System.IO.Abstractions | *Migrate System.IO.Abstractions MockFileSystem to Testably* |
 
 ## Supported migrations
+
+The code fix swaps the `using` directive and rewrites each call on the `MockFileSystem`:
+
+<ApplyFix id="TestablyM001" migrateTo="Testably.Abstractions">
+
+```csharp title="Before (TestableIO)"
+// highlight-next-line
+using System.IO.Abstractions.TestingHelpers;
+
+MockFileSystem fs = new MockFileSystem();
+// highlight-start
+fs.AddDirectory("/b");
+fs.AddFile("/a", new MockFileData("x"));
+// highlight-end
+```
+
+```csharp title="After (Testably.Abstractions)"
+// highlight-next-line
+using Testably.Abstractions.Testing;
+
+MockFileSystem fs = new MockFileSystem();
+// highlight-start
+fs.Directory.CreateDirectory("/b");
+fs.File.WriteAllText("/a", "x");
+// highlight-end
+```
+
+</ApplyFix>
 
 ### `MockFileSystem` constructors
 
