@@ -1,13 +1,21 @@
 ---
-sidebar_label: Migration analyzer
-description: A Roslyn analyzer and code fix that rewrites TestableIO MockFileSystem tests to the Testably.Abstractions MockFileSystem.
+description: Switch the tests from TestableIO.System.IO.Abstractions.TestingHelpers to Testably.Abstractions.Testing, automatically with the Testably.Abstractions.Migration code fix or by hand.
 ---
 
 import PackageInstall from '@site/src/components/PackageInstall';
 
-# Testably.Abstractions.Migration
+# Migration from TestableIO
 
-`Testably.Abstractions.Migration` is a Roslyn analyzer with a code fix that automates the call-site rewrites from TestableIO to [Testably.Abstractions](/Abstractions) described in [Migration from TestableIO](../). The code fix rewrites the supported patterns, and the analyzer reports the rest so you can address them by hand.
+`Testably.Abstractions` and [TestableIO.System.IO.Abstractions](https://github.com/TestableIO/System.IO.Abstractions) share the **same** `IFileSystem` interface, so production code does not need to change when you switch testing libraries. The migration only affects your **test** projects, and there are two ways to do it:
+
+- **Automatically**: the `Testably.Abstractions.Migration` package is a Roslyn analyzer with a code fix that rewrites the supported call sites, and reports the rest so you can address them by hand. This page describes how to use it, and [Migrating from TestableIO](./01-testableio.md) shows what the code fix rewrites.
+- **By hand**: swap the package and rewrite the call sites yourself (see [Migrating by hand](#migrating-by-hand)).
+
+## When to use which
+
+The shared `IFileSystem` interface means production code is identical either way; this choice only affects tests. The core differentiator: `Testably.Abstractions` runs its full test suite against both `MockFileSystem` and `RealFileSystem` on every supported OS and against each `SimulationMode`, so the mock and the real OS stay in lock-step over time.
+
+Pick **Testably.Abstractions** when you need a watcher, `SafeFileHandle`, multiple drives with size quotas, the `ITimeSystem` / `IRandomSystem` companions, or you want to exercise Linux/macOS/Windows behavior from a single CI job. Pick **TestableIO.System.IO.Abstractions** when you're already using its `MockFileData` / `MockDirectoryData` to inspect or mutate the in-memory store directly; that surface has no equivalent here.
 
 ## Installation
 
@@ -59,10 +67,10 @@ A supported construct that does not meet the conditions in the tables of [Migrat
 
 | Pattern                                              | Why manual                                                                                        |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](../../06-companion-libraries/02-access-control.mdx); to deny access, register a strategy with [`WithAccessControlStrategy`](../../03-file-system/07-access-control.mdx). |
-| `MockFileData.AllowedFileShare`                      | Testably.Abstractions [honors the `FileShare`](../../03-file-system/09-safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
-| `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](../../03-file-system/08-unix-file-mode.mdx). |
-| `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](../../03-file-system/11-file-version-info.mdx). |
+| `MockFileData.AccessControl`                         | Use `SetAccessControl` from the [AccessControl companion package](../06-companion-libraries/02-access-control.mdx); to deny access, register a strategy with [`WithAccessControlStrategy`](../03-file-system/07-access-control.mdx). |
+| `MockFileData.AllowedFileShare`                      | Testably.Abstractions [honors the `FileShare`](../03-file-system/09-safe-file-handles.mdx) a file was opened with; keep a stream with the restricted share open instead. |
+| `MockFileData.UnixMode`                              | Use `File.SetUnixFileMode`; to enforce the permissions, register a strategy with [`WithUnixFileModeStrategy`](../03-file-system/08-unix-file-mode.mdx). |
+| `new MockFileVersionInfo(...)`                       | Register the version information for a path pattern with [`WithFileVersionInfo`](../03-file-system/11-file-version-info.mdx). |
 | Subclassing `MockFileSystem` / `MockFileData`        | Inheritance contract differs in Testably.Abstractions.                                            |
 | `new MockFileData(MockFileData template)`            | Copy-clone semantics differ; no Testably.Abstractions equivalent.                                 |
 | Captured-reference `MockFileData` property access    | `var data = fs.GetFile(path); data.Prop = …` cannot be rewritten without local flow analysis.     |
@@ -97,3 +105,39 @@ dotnet remove package Testably.Abstractions.Migration
 ```
 
 `Testably.Abstractions.Testing` stays in the project; that is the library the tests now depend on.
+
+## Migrating by hand
+
+If you'd rather not introduce a build-time analyzer, swap the package and rewrite the call sites yourself.
+
+1. **Swap the package:**
+
+   ```xml
+   <!-- Remove -->
+   <PackageReference Include="TestableIO.System.IO.Abstractions.TestingHelpers" />
+   <!-- Add -->
+   <PackageReference Include="Testably.Abstractions.Testing" />
+   ```
+
+2. **Update the test code:**
+
+   ```csharp
+   // Before (TestableIO)
+   MockFileSystem fileSystem = new();
+   fileSystem.AddDirectory("artworks");
+   fileSystem.AddFile("artworks/red-square.txt", new MockFileData("Oil on canvas"));
+
+   // After (Testably), option A: imperative
+   MockFileSystem fileSystem = new();
+   fileSystem.Directory.CreateDirectory("artworks");
+   fileSystem.File.WriteAllText("artworks/red-square.txt", "Oil on canvas");
+
+   // After (Testably), option B: fluent initialization
+   MockFileSystem fileSystem = new();
+   fileSystem.Initialize()
+       .WithSubdirectory("artworks").Initialized(d => d
+           .WithFile("red-square.txt").Which(f => f
+               .HasStringContent("Oil on canvas")));
+   ```
+
+Production code keeps using `IFileSystem` exactly as before; no changes there.
