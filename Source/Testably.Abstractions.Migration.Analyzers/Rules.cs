@@ -12,7 +12,7 @@ public static class Rules
 	// The help link is the fixed public documentation URL of the rule.
 #pragma warning disable S1075
 	private const string DocsBaseUrl =
-		"https://docs.testably.org/Abstractions/Migration";
+		"https://docs.testably.org/Abstractions/migration/";
 #pragma warning restore S1075
 
 	/// <summary>

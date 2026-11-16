@@ -7,7 +7,7 @@
 
 A Roslyn analyzer with a code fix that migrates [System.IO.Abstractions](https://github.com/TestableIO/System.IO.Abstractions) (`TestableIO`) usage of `MockFileSystem` and `MockFileData` to the [Testably.Abstractions](https://github.com/Testably/Testably.Abstractions) `MockFileSystem` API. Drop the package into a project that uses `TestableIO.System.IO.Abstractions.TestingHelpers`: the code fix rewrites the supported patterns, and the analyzer reports the rest so you can address them by hand.
 
-The documentation is at **[docs.testably.org/Abstractions/migration-from-testableio](https://docs.testably.org/Abstractions/migration-from-testableio/)**.
+The documentation is at **[docs.testably.org/Abstractions/migration](https://docs.testably.org/Abstractions/migration/)**.
 
 ## Installation
 
@@ -28,7 +28,7 @@ The analyzer reports every call site with the single diagnostic id `TestablyM001
 |----------------|----------------|---------------------------------------------------------------------------|
 | `TestablyM001` | TestableIO     | *Migrate System.IO.Abstractions MockFileSystem to Testably.Abstractions* |
 
-What the code fix rewrites, with examples and the supported constructs, is described in [Migrating from TestableIO](https://docs.testably.org/Abstractions/migration-from-testableio/testableio).
+What the code fix rewrites, with examples and the supported constructs, is described in [Migrating from TestableIO](https://docs.testably.org/Abstractions/migration/from-testableio).
 
 ## Recommended workflow
 
