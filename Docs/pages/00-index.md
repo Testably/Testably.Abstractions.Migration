@@ -4,11 +4,11 @@ description: Switch the tests from TestableIO.System.IO.Abstractions.TestingHelp
 
 import PackageInstall from '@site/src/components/PackageInstall';
 
-# Migration from TestableIO
+# Migration
 
 `Testably.Abstractions` and [TestableIO.System.IO.Abstractions](https://github.com/TestableIO/System.IO.Abstractions) share the **same** `IFileSystem` interface, so production code does not need to change when you switch testing libraries. The migration only affects your **test** projects, and there are two ways to do it:
 
-- **Automatically**: the `Testably.Abstractions.Migration` package is a Roslyn analyzer with a code fix that rewrites the supported call sites, and reports the rest so you can address them by hand. This page describes how to use it, and [Migrating from TestableIO](./01-testableio.md) shows what the code fix rewrites.
+- **Automatically**: the `Testably.Abstractions.Migration` package is a Roslyn analyzer with a code fix that rewrites the supported call sites, and reports the rest so you can address them by hand. This page describes how to use it, and [Migrating from TestableIO](./01-from-testableio.md) shows what the code fix rewrites.
 - **By hand**: swap the package and rewrite the call sites yourself (see [Migrating by hand](#migrating-by-hand)).
 
 ## When to use which
@@ -35,9 +35,9 @@ The analyzer reports every call site with the single diagnostic id `TestablyM001
 
 | Diagnostic     | Source library                         | Code fix title                                                            |
 |----------------|----------------------------------------|---------------------------------------------------------------------------|
-| `TestablyM001` | [TestableIO](./01-testableio.md)       | *Migrate System.IO.Abstractions MockFileSystem to Testably.Abstractions* |
+| `TestablyM001` | [TestableIO](./01-from-testableio.md)  | *Migrate System.IO.Abstractions MockFileSystem to Testably.Abstractions* |
 
-What the code fix rewrites, with examples and the supported constructs, is described in [Migrating from TestableIO](./01-testableio.md).
+What the code fix rewrites, with examples and the supported constructs, is described in [Migrating from TestableIO](./01-from-testableio.md).
 
 ## Recommended workflow
 
@@ -63,7 +63,7 @@ dotnet format analyzers --diagnostics TestablyM001
 
 These call sites are flagged with `TestablyM001` but have no automatic rewrite, either because `Testably.Abstractions` has no equivalent surface or because a safe rewrite would require flow analysis the analyzer does not perform. Address each one by hand.
 
-A supported construct that does not meet the conditions in the tables of [Migrating from TestableIO](./01-testableio.md), for example `MockFileSystemOptions` other than `CurrentDirectory`, keeps its warning as well.
+A supported construct that does not meet the conditions in the tables of [Migrating from TestableIO](./01-from-testableio.md), for example `MockFileSystemOptions` other than `CurrentDirectory`, keeps its warning as well.
 
 | Pattern                                              | Why manual                                                                                        |
 |------------------------------------------------------|---------------------------------------------------------------------------------------------------|
