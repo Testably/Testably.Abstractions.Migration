@@ -12,4 +12,4 @@ Pages under `Docs/pages` are published on docs.testably.org and follow the [docs
 - Install instructions only through `<PackageInstall package="..." />`, never hand-written commands or NuGet badges.
 - Examples check results with `await That(...)`; complete examples use TUnit `[Test]`.
 
-`Docs/pages/00-index.md` is published inside the Testably.Abstractions section (`/Abstractions/migration-from-testableio/Migration/`), so it links to its neighbors with relative paths as they are on the site, e.g. `../../03-file-system/07-access-control.mdx`.
+The pages under `Docs/pages` make up the "Migration from TestableIO" section of the Testably.Abstractions docs (`/Abstractions/migration-from-testableio/`), so they link to their neighbors with relative paths as they are on the site, e.g. `../03-file-system/07-access-control.mdx`.
